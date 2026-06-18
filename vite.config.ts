@@ -3,8 +3,13 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Deployed under a GitHub Pages project subpath (https://<user>.github.io/<repo>/).
+// Override with VITE_BASE=/ for root-domain hosting (Netlify/Vercel/custom domain).
+const BASE = process.env.VITE_BASE ?? '/reading-app/'
+
 // https://vite.dev/config/
 export default defineConfig({
+  base: BASE,
   plugins: [
     react(),
     tailwindcss(),
@@ -70,7 +75,9 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
-        start_url: '/',
+        id: BASE,
+        start_url: BASE,
+        scope: BASE,
         icons: [
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
         ],

@@ -27,7 +27,10 @@ export interface Capabilities {
 async function detectWebGPU(): Promise<boolean> {
   if (!('gpu' in navigator) || !navigator.gpu) return false
   try {
-    const adapter = await navigator.gpu.requestAdapter()
+    // requestAdapter() can hang on some drivers / headless envs; cap the wait
+    // so capability detection (and the whole app boot) never blocks on it.
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+    const adapter = await Promise.race([navigator.gpu.requestAdapter(), timeout])
     return adapter !== null
   } catch {
     return false

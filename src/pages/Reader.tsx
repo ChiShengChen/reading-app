@@ -82,7 +82,7 @@ export default function Reader() {
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-5">
       <div>
-        <h2 className="text-xl font-semibold">閱讀 · OCR 測試（Phase 1–3）</h2>
+        <h2 className="text-xl font-semibold">閱讀 · 拍照辨識</h2>
         <p className="mt-1 text-sm text-slate-400">
           拍照／上傳 → 框選 → 偵測（PaddleOCR）＋ 辨識（英文 Tesseract／日文 manga-ocr）→
           切句 → 翻譯（Opus-MT／Translator API）。後端：

@@ -19,8 +19,13 @@ import { recognizeRegion, recognizeEng, preloadRecognizer } from './recognizers'
 import type { OcrLanguage } from './recognizers/types'
 import type { Box, PipelineResult, ProgressCallback, RecognizedRegion } from './types'
 
-/** Drop recognized regions that are empty or below this recognition score. */
-const MIN_REC_SCORE = 0.4
+/**
+ * Confidence gate. Japanese (manga-ocr) hallucinates, so low-confidence regions
+ * are dropped. English (Tesseract) does NOT hallucinate, so we keep all
+ * non-empty text — dropping low-confidence lines was silently losing whole
+ * paragraphs. Empty text is always dropped.
+ */
+const MIN_REC_SCORE_JA = 0.4
 
 export async function runOcr(
   cropped: HTMLCanvasElement,
@@ -131,8 +136,9 @@ export async function runOcr(
       // Crop the line, then micro-deskew it level before recognition.
       const regionCanvas = deskewCanvas(cropCanvas(enhanced, region.box))
       const out = await recognizeRegion(regionCanvas, lang, region.detScore, backend)
-      // Critical Rule #2: discard empty / low-confidence regions.
-      if (!out.text || out.score < MIN_REC_SCORE) continue
+      // Drop empty always; drop low-confidence only for hallucination-prone JP.
+      if (!out.text) continue
+      if (lang === 'ja' && out.score < MIN_REC_SCORE_JA) continue
       regions.push({
         ...region,
         text: out.text,

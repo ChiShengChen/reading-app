@@ -29,11 +29,11 @@ const MEAN = [0.485, 0.456, 0.406]
 const STD = [0.229, 0.224, 0.225]
 
 // DB postprocessing params.
-const BIN_THRESH = 0.3
-const BOX_THRESH = 0.35
+const BIN_THRESH = 0.28
+const BOX_THRESH = 0.3
 const UNCLIP_RATIO = 1.6
 const MIN_BOX_SIDE = 6
-const MAX_SIDE = 960 // resize long side cap for detection
+const MAX_SIDE = 1280 // resize long side cap for detection (higher = better recall on dense pages)
 
 let sessionPromise: Promise<ort.InferenceSession> | null = null
 let sessionBackend: ComputeBackend | null = null

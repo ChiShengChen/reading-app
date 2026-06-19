@@ -31,6 +31,17 @@ const createImageToText = pipeline as unknown as PipelineFactory
 
 // We always fetch from the hub; cache lives in the browser Cache API.
 env.allowLocalModels = false
+// Force single-threaded ORT WASM: GitHub Pages can't set COOP/COEP, so there's
+// no SharedArrayBuffer and the multi-threaded wasm fails initWasm(). Applies to
+// all Transformers.js inference (manga-ocr + Opus-MT) since env is a singleton.
+{
+  const wasm = (env.backends as { onnx?: { wasm?: { numThreads?: number; proxy?: boolean } } })?.onnx
+    ?.wasm
+  if (wasm) {
+    wasm.numThreads = 1
+    wasm.proxy = false
+  }
+}
 
 // Complete export (encoder + decoder_model_merged + q8 + tokenizer.json +
 // preprocessor). Override via setMangaOcrModel() / 設定→進階.

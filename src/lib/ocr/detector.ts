@@ -18,6 +18,11 @@ import type { Box, DetectedRegion } from './types'
 // Must honour the Vite base path (e.g. GitHub Pages '/reading-app/'), else the
 // WebGPU/WASM binaries 404 and the detector fails to initialise.
 ort.env.wasm.wasmPaths = `${import.meta.env.BASE_URL}ort/`
+// The bundled wasm is the multi-threaded build, which needs SharedArrayBuffer
+// (cross-origin isolation / COOP+COEP) — unavailable on GitHub Pages. Force
+// single-threaded + no proxy worker so initWasm() succeeds without SAB.
+ort.env.wasm.numThreads = 1
+ort.env.wasm.proxy = false
 
 // ImageNet normalization used by PaddleOCR det.
 const MEAN = [0.485, 0.456, 0.406]

@@ -12,6 +12,7 @@ import { getDetModelSpec, isModelCached, fetchModel, deleteModel } from '../ocr/
 import { loadMangaOcr, isMangaOcrCached, getMangaOcrModelId } from '../ocr/recognizers'
 import { loadOpusModel, getOpusChain } from '../translate'
 import { isDictCached, downloadDict, deleteDict } from '../dict/jmdict'
+import { isEcdictCached, downloadEcdict, deleteEcdict } from '../dict/ecdict'
 import type { OcrLanguage } from '../ocr/recognizers/types'
 
 export type ModelScope = '通用' | '英文' | '日文'
@@ -103,6 +104,16 @@ export const MODEL_ENTRIES: ModelEntry[] = [
     isCached: () => opusChainCached('en'),
     download: (backend, onP) => opusChainDownload('en', backend, onP),
     remove: () => opusChainDelete('en'),
+  },
+  {
+    id: 'ecdict',
+    label: '英文字典（ECDICT 英→中 / sql.js）',
+    scope: '英文',
+    approxBytes: 60 * MB,
+    large: true,
+    isCached: () => isEcdictCached(),
+    download: (_b, onP) => downloadEcdict((ratio, msg) => onP(ratio, msg)),
+    remove: () => deleteEcdict(),
   },
   {
     id: 'manga-ocr',

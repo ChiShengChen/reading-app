@@ -4,6 +4,7 @@ import { formatBytes } from '../lib/storage'
 import { MODEL_ENTRIES, type ModelEntry } from '../lib/models/registry'
 import { getMangaOcrModelId, setMangaOcrModel } from '../lib/ocr/recognizers'
 import { getDictDbUrl, setDictDbUrl } from '../lib/dict/jmdict'
+import { getEcdictDbUrl, setEcdictDbUrl } from '../lib/dict/ecdict'
 
 export default function Settings() {
   const { capabilities, storage, preferredEngine, setPreferredEngine, backend } = useApp()
@@ -112,6 +113,14 @@ function AdvancedSection() {
         placeholder="https://huggingface.co/you/jmdict-sqlite/resolve/main/jmdict.sqlite"
         get={getDictDbUrl}
         set={setDictDbUrl}
+      />
+
+      <OverrideField
+        label="英文字典 ECDICT sqlite (URL)"
+        hint="英→中字典，讓你讀英文時點字查中文（見 docs/build-ecdict.md）。貼 .sqlite 的網址；留空回復預設。"
+        placeholder="https://huggingface.co/you/ecdict-sqlite/resolve/main/ecdict.sqlite"
+        get={getEcdictDbUrl}
+        set={setEcdictDbUrl}
       />
     </section>
   )

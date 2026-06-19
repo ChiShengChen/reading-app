@@ -14,6 +14,7 @@ import type {
 } from '../lib/translate'
 import { Link } from 'react-router-dom'
 import JpLookup from '../components/JpLookup'
+import EnLookup from '../components/EnLookup'
 import { addNote, createBook, addPage, listBooks, type Book } from '../db/db'
 import { canvasToBlob, makeThumbnail } from '../lib/image/preprocess'
 
@@ -292,10 +293,14 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
         </div>
       </div>
 
-      {/* Japanese click-to-look-up + notebook (Phase 4) */}
-      {result.lang === 'ja' && result.regions.length > 0 && (
+      {/* Click-to-look-up + notebook (Phase 4) */}
+      {result.regions.length > 0 && (
         <div className="rounded-lg border border-slate-700 p-4">
-          <JpLookup regions={result.regions} />
+          {result.lang === 'ja' ? (
+            <JpLookup regions={result.regions} />
+          ) : (
+            <EnLookup regions={result.regions} />
+          )}
         </div>
       )}
 

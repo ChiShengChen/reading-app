@@ -12,6 +12,7 @@ import {
   type Bookmark,
 } from '../db/db'
 import JpLookup from '../components/JpLookup'
+import EnLookup from '../components/EnLookup'
 
 export default function PageView() {
   const { bookId, pageIndex } = useParams()
@@ -114,11 +115,10 @@ export default function PageView() {
         </div>
       )}
 
-      {/* Extracted text (non-JP, or as plain reference) */}
-      {book?.language !== 'ja' && (
+      {/* English click-to-look-up (ECDICT); notes link back to this book/page */}
+      {book?.language === 'en' && page.ocrRegions.length > 0 && (
         <div className="rounded-lg border border-slate-700 p-4">
-          <h3 className="mb-2 text-sm font-medium text-slate-300">取出文字</h3>
-          <p className="whitespace-pre-wrap text-sm text-slate-100">{page.fullText}</p>
+          <EnLookup regions={page.ocrRegions} bookId={id} pageIndex={index} />
         </div>
       )}
 

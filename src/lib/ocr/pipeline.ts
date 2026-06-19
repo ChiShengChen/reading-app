@@ -12,7 +12,7 @@
  */
 import type { ComputeBackend } from '../capabilities'
 import { errorMessage } from '../errorMessage'
-import { enhanceForOcr, cropCanvas } from '../image/preprocess'
+import { enhanceForOcr, cropCanvas, deskewCanvas } from '../image/preprocess'
 import { splitSentences } from '../text/sentences'
 import { detect } from './detector'
 import { recognizeRegion, recognizeEng, preloadRecognizer } from './recognizers'
@@ -118,7 +118,8 @@ export async function runOcr(
         ratio: i / total,
         message: `辨識區域 ${i + 1} / ${total}`,
       })
-      const regionCanvas = cropCanvas(enhanced, region.box)
+      // Crop the line, then micro-deskew it level before recognition.
+      const regionCanvas = deskewCanvas(cropCanvas(enhanced, region.box))
       const out = await recognizeRegion(regionCanvas, lang, region.detScore, backend)
       // Critical Rule #2: discard empty / low-confidence regions.
       if (!out.text || out.score < MIN_REC_SCORE) continue

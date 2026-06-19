@@ -164,7 +164,12 @@ function otsuThreshold(gray: Uint8ClampedArray): number {
  * downscaled binary image: the angle whose horizontal ink projection has the
  * highest variance is the one where text rows line up. Range +-7 deg.
  */
-function estimateSkewAngle(gray: Uint8ClampedArray, w: number, h: number): number {
+function estimateSkewAngle(
+  gray: Uint8ClampedArray,
+  w: number,
+  h: number,
+  maxDeg = 7,
+): number {
   // Downscale to keep this cheap.
   const maxDim = 640
   const ds = Math.min(1, maxDim / Math.max(w, h))
@@ -184,7 +189,7 @@ function estimateSkewAngle(gray: Uint8ClampedArray, w: number, h: number): numbe
   const cy = sh / 2
   let bestAngle = 0
   let bestScore = -1
-  for (let deg = -7; deg <= 7; deg += 0.5) {
+  for (let deg = -maxDeg; deg <= maxDeg; deg += 0.5) {
     const rad = (deg * Math.PI) / 180
     const sin = Math.sin(rad)
     const cos = Math.cos(rad)
@@ -227,6 +232,38 @@ function rotateCanvas(src: HTMLCanvasElement, deg: number): HTMLCanvasElement {
   ctx.translate(out.width / 2, out.height / 2)
   ctx.rotate(rad)
   ctx.drawImage(src, -src.width / 2, -src.height / 2)
+  return out
+}
+
+/**
+ * Per-line micro-deskew: estimate a small skew on a single cropped text line and
+ * rotate it level before recognition. Safer than whole-page deskew (each line is
+ * short, so a wrong global angle can't smear the page). Output canvas grows to
+ * fit the rotated content so line ends aren't clipped. Returns src unchanged if
+ * the estimated angle is negligible.
+ */
+export function deskewCanvas(src: HTMLCanvasElement, maxDeg = 6): HTMLCanvasElement {
+  const ctx = src.getContext('2d')!
+  const { data } = ctx.getImageData(0, 0, src.width, src.height)
+  const gray = new Uint8ClampedArray(src.width * src.height)
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    gray[p] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0
+  }
+  const angle = estimateSkewAngle(gray, src.width, src.height, maxDeg)
+  if (Math.abs(angle) < 0.5) return src
+
+  const rad = (-angle * Math.PI) / 180
+  const sin = Math.abs(Math.sin(rad))
+  const cos = Math.abs(Math.cos(rad))
+  const out = document.createElement('canvas')
+  out.width = Math.ceil(src.width * cos + src.height * sin)
+  out.height = Math.ceil(src.width * sin + src.height * cos)
+  const octx = out.getContext('2d')!
+  octx.fillStyle = '#ffffff'
+  octx.fillRect(0, 0, out.width, out.height)
+  octx.translate(out.width / 2, out.height / 2)
+  octx.rotate(rad)
+  octx.drawImage(src, -src.width / 2, -src.height / 2)
   return out
 }
 

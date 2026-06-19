@@ -22,12 +22,31 @@
  */
 import initSqlJs, { type Database } from 'sql.js'
 
-let DICT_DB_URL = '/dict-db/jmdict.sqlite'
+// JMdict sqlite built by scripts/build-jmdict-sqlite.py and hosted on HF.
+// Overridable + persisted via 設定→進階.
+const DEFAULT_DICT_DB_URL = 'https://huggingface.co/ms57rd/jmdict-sqlite/resolve/main/jmdict.sqlite'
+const LS_DICT_KEY = 'dictDbUrl'
+
+function readDictUrl(): string {
+  try {
+    return localStorage.getItem(LS_DICT_KEY) || DEFAULT_DICT_DB_URL
+  } catch {
+    return DEFAULT_DICT_DB_URL
+  }
+}
+
+let DICT_DB_URL = readDictUrl()
 let LOOKUP_SQL =
   'SELECT kanji, reading, glosses FROM entries WHERE kanji = ?1 OR reading = ?1 OR kanji = ?2 LIMIT 30'
 
 export function setDictDbUrl(url: string) {
-  DICT_DB_URL = url
+  try {
+    if (url.trim()) localStorage.setItem(LS_DICT_KEY, url.trim())
+    else localStorage.removeItem(LS_DICT_KEY)
+  } catch {
+    /* ignore */
+  }
+  DICT_DB_URL = readDictUrl()
   dbPromise = null
 }
 export function setLookupSql(sql: string) {

@@ -3,6 +3,7 @@ import { useApp } from '../AppContext'
 import { formatBytes } from '../lib/storage'
 import { MODEL_ENTRIES, type ModelEntry } from '../lib/models/registry'
 import { getMangaOcrModelId, setMangaOcrModel } from '../lib/ocr/recognizers'
+import { getDictDbUrl, setDictDbUrl } from '../lib/dict/jmdict'
 
 export default function Settings() {
   const { capabilities, storage, preferredEngine, setPreferredEngine, backend } = useApp()
@@ -91,46 +92,72 @@ export default function Settings() {
   )
 }
 
-/** Advanced overrides — e.g. point manga-ocr at your own complete ONNX export. */
+/** Advanced overrides — point manga-ocr / JMdict at your own hosted files. */
 function AdvancedSection() {
-  const [model, setModel] = useState(getMangaOcrModelId())
-  const [saved, setSaved] = useState(false)
-
-  function save() {
-    setMangaOcrModel(model)
-    setModel(getMangaOcrModelId())
-    setSaved(true)
-  }
-
   return (
-    <section className="space-y-3 rounded-lg border border-slate-700 p-4">
+    <section className="space-y-4 rounded-lg border border-slate-700 p-4">
       <h3 className="text-sm font-medium text-slate-200">進階</h3>
-      <label className="block text-xs text-slate-400">
-        日文辨識模型 (Hugging Face repo id)
-        <p className="mt-0.5 text-slate-500">
-          預設已指向一份完整的 manga-ocr ONNX。若要改用你自己轉好的版本
-          （見 docs/convert-manga-ocr.md），在此貼上 repo id，例如{' '}
-          <span className="text-slate-300">你的帳號/manga-ocr-base-ONNX</span>。留空則回復預設。
-        </p>
-        <div className="mt-2 flex gap-2">
-          <input
-            value={model}
-            onChange={(e) => {
-              setModel(e.target.value)
-              setSaved(false)
-            }}
-            placeholder="username/manga-ocr-base-ONNX"
-            className="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-200"
-          />
-          <button
-            onClick={save}
-            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-sky-400"
-          >
-            {saved ? '已儲存 ✓' : '儲存'}
-          </button>
-        </div>
-      </label>
+
+      <OverrideField
+        label="日文辨識模型 (Hugging Face repo id)"
+        hint="預設已指向一份完整的 manga-ocr ONNX。要改用自己轉的版本（見 docs/convert-manga-ocr.md）就貼 repo id；留空回復預設。"
+        placeholder="username/manga-ocr-base-ONNX"
+        get={getMangaOcrModelId}
+        set={setMangaOcrModel}
+      />
+
+      <OverrideField
+        label="日文字典 JMdict sqlite (URL)"
+        hint="預設指向一份 JMdict sqlite。要改用自己建的（見 docs/build-jmdict.md）就貼 .sqlite 的網址；留空回復預設。"
+        placeholder="https://huggingface.co/you/jmdict-sqlite/resolve/main/jmdict.sqlite"
+        get={getDictDbUrl}
+        set={setDictDbUrl}
+      />
     </section>
+  )
+}
+
+function OverrideField({
+  label,
+  hint,
+  placeholder,
+  get,
+  set,
+}: {
+  label: string
+  hint: string
+  placeholder: string
+  get: () => string
+  set: (v: string) => void
+}) {
+  const [value, setValue] = useState(get())
+  const [saved, setSaved] = useState(false)
+  return (
+    <label className="block text-xs text-slate-400">
+      {label}
+      <p className="mt-0.5 text-slate-500">{hint}</p>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value)
+            setSaved(false)
+          }}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+        />
+        <button
+          onClick={() => {
+            set(value)
+            setValue(get())
+            setSaved(true)
+          }}
+          className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-sky-400"
+        >
+          {saved ? '已儲存 ✓' : '儲存'}
+        </button>
+      </div>
+    </label>
   )
 }
 

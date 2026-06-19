@@ -47,31 +47,34 @@ def main() -> int:
     onnx_dir = out / "onnx"
     onnx_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Export to ONNX (encoder + decoder + merged decoder) via optimum.
+    # 1) Export to ONNX via optimum. manga-ocr's decoder is BERT (NO key-value
+    # cache), so the "*-with-past" task is invalid here — use plain image-to-text,
+    # which yields encoder_model.onnx + decoder_model.onnx.
     from optimum.exporters.onnx import main_export
 
     print(f"[1/4] Exporting {args.model_id} to ONNX (this downloads the model)…")
     main_export(
         model_name_or_path=args.model_id,
         output=str(raw),
-        task="image-to-text-with-past",  # produces decoder_with_past + merged decoder
+        task="image-to-text",
     )
 
-    merged = raw / "decoder_model_merged.onnx"
     encoder = raw / "encoder_model.onnx"
-    if not merged.exists() or not encoder.exists():
+    decoder = raw / "decoder_model.onnx"
+    if not encoder.exists() or not decoder.exists():
         print(
-            f"ERROR: expected {encoder.name} and {merged.name} in {raw}.\n"
-            f"Found: {[p.name for p in raw.glob('*.onnx')]}\n"
-            "Your optimum version may not merge the decoder — upgrade optimum.",
+            f"ERROR: expected {encoder.name} and {decoder.name} in {raw}.\n"
+            f"Found: {[p.name for p in raw.glob('*.onnx')]}",
             file=sys.stderr,
         )
         return 1
 
-    # 2) Place the two files Transformers.js loads into onnx/ (fp32).
+    # 2) Arrange onnx/ (fp32). Transformers.js Vision2Seq always loads a file
+    # named `decoder_model_merged.onnx`; for a no-cache decoder it just feeds the
+    # inputs the session declares, so the plain decoder works under that name.
     print("[2/4] Arranging onnx/ folder (fp32)…")
     shutil.copy2(encoder, onnx_dir / "encoder_model.onnx")
-    shutil.copy2(merged, onnx_dir / "decoder_model_merged.onnx")
+    shutil.copy2(decoder, onnx_dir / "decoder_model_merged.onnx")
 
     # 3) Quantize to uint8 -> the "_quantized" files the WASM path (dtype q8) uses.
     if not args.skip_quantize:

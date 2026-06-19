@@ -41,6 +41,10 @@ huggingface-cli upload <your-username>/manga-ocr-base-ONNX manga-ocr-onnx .
 之後日文 OCR 就能用（手機走 WASM 會用 `_quantized` 版，桌機 WebGPU 用 fp32 版）。
 
 ## 疑難排解
-- **缺 `decoder_model_merged.onnx`**：升級 optimum（`pip install -U optimum`）再跑一次。
+- **`ValueError: ... decoder ... is bert which does not need past key values`**：已修正。
+  manga-ocr 的 decoder 是 BERT、沒有 KV cache，所以腳本改用 `image-to-text`（非
+  `-with-past`），並把 `decoder_model.onnx` 複製成 `decoder_model_merged.onnx`
+  （Transformers.js 只會餵該 session 實際宣告的輸入，無 cache 也能跑）。請 `git pull` 取得最新腳本再跑。
+- **缺檔**：確認 `manga-ocr-onnx/onnx/` 內有 encoder/decoder_model_merged（+ _quantized）四個檔。
 - **下載很慢/很大**：fp32+q8 約數百 MB。只想先驗證可加 `--skip-quantize`（但手機 WASM 會很慢）。
 - **CORS / 401**：repo 要 public；URL 形如 `https://huggingface.co/<id>/resolve/main/...`。

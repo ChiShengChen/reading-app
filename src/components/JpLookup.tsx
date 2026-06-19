@@ -23,10 +23,13 @@ interface Selection {
  * Intl.Segmenter fallback), renders clickable content words, and on click shows
  * the JMdict definition with a "save to notebook" action.
  */
+const hasKanji = (s: string) => /[㐀-鿿]/.test(s)
+
 export default function JpLookup({ regions, bookId, pageIndex, onSaved }: Props) {
   const [tokensByRegion, setTokensByRegion] = useState<JpToken[][] | null>(null)
   const [usingKuromoji, setUsingKuromoji] = useState<boolean | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [furigana, setFurigana] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +48,7 @@ export default function JpLookup({ regions, bookId, pageIndex, onSaved }: Props)
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs text-slate-500">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span className="font-medium text-slate-300">日文斷詞</span>
         {usingKuromoji === null ? (
           <span>斷詞中…</span>
@@ -55,6 +58,18 @@ export default function JpLookup({ regions, bookId, pageIndex, onSaved }: Props)
           <span className="text-amber-300">Intl.Segmenter 後備（無讀音／辭典原形）</span>
         )}
         <span>· 點選詞語查字典</span>
+        {usingKuromoji && (
+          <button
+            onClick={() => setFurigana((f) => !f)}
+            className={`ml-auto rounded border px-2 py-0.5 ${
+              furigana
+                ? 'border-sky-700 bg-sky-500/20 text-sky-300'
+                : 'border-slate-600 text-slate-400'
+            }`}
+          >
+            注音 {furigana ? '開' : '關'}
+          </button>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -78,7 +93,14 @@ export default function JpLookup({ regions, bookId, pageIndex, onSaved }: Props)
                     selection?.token === t ? 'bg-sky-500/40' : ''
                   }`}
                 >
-                  {t.surface}
+                  {furigana && t.reading && hasKanji(t.surface) && t.reading !== t.surface ? (
+                    <ruby>
+                      {t.surface}
+                      <rt className="text-[0.6em] text-slate-400">{t.reading}</rt>
+                    </ruby>
+                  ) : (
+                    t.surface
+                  )}
                 </button>
               ) : (
                 <span key={j}>{t.surface}</span>

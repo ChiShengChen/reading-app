@@ -13,7 +13,7 @@
 import type { ComputeBackend } from '../capabilities'
 import { errorMessage } from '../errorMessage'
 import { enhanceForOcr, cropCanvas, deskewCanvas, rotate90 } from '../image/preprocess'
-import { splitSentences } from '../text/sentences'
+import { splitSentences, mergeLines } from '../text/sentences'
 import { detect } from './detector'
 import { recognizeRegion, recognizeEng, preloadRecognizer } from './recognizers'
 import type { OcrLanguage } from './recognizers/types'
@@ -148,8 +148,14 @@ export async function runOcr(
     }
   }
 
-  const fullText = regions.map((r) => r.text).join('\n')
-  const sentences = regions.flatMap((r) => r.sentences)
+  // Merge detected lines into reading-order text, then sentence-split — so a
+  // sentence spanning several line-boxes translates as one unit.
+  const merged = mergeLines(
+    regions.map((r) => r.text),
+    lang,
+  )
+  const fullText = merged || regions.map((r) => r.text).join('\n')
+  const sentences = splitSentences(merged, lang)
   onProgress?.({ stage: 'done', ratio: 1, message: `完成，取得 ${regions.length} 個區域` })
 
   return {

@@ -11,6 +11,40 @@ import {
 
 type Filter = 'all' | 'word' | 'sentence'
 
+function download(filename: string, text: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Anki = tab-separated (front, back, tags); CSV = quoted full columns. */
+function exportNotes(notes: Note[], fmt: 'anki' | 'csv') {
+  if (fmt === 'anki') {
+    const rows = notes.map((n) => {
+      const front = n.reading ? `${n.term}（${n.reading}）` : n.term
+      const back = [n.definition, n.contextSentence && n.contextSentence !== n.term ? n.contextSentence : '']
+        .filter(Boolean)
+        .join('<br>')
+      const tags = n.tags.join(' ')
+      // Tab-separated; strip tabs/newlines from fields.
+      return [front, back, tags].map((f) => f.replace(/[\t\r\n]+/g, ' ')).join('\t')
+    })
+    download('notes-anki.txt', rows.join('\n'), 'text/plain;charset=utf-8')
+    return
+  }
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+  const header = ['type', 'term', 'reading', 'definition', 'context', 'tags'].join(',')
+  const rows = notes.map((n) =>
+    [n.sourceType, n.term, n.reading ?? '', n.definition ?? '', n.contextSentence ?? '', n.tags.join(' ')]
+      .map((v) => esc(String(v)))
+      .join(','),
+  )
+  download('notes.csv', '﻿' + [header, ...rows].join('\n'), 'text/csv;charset=utf-8')
+}
+
 export default function Notebook() {
   const [notes, setNotes] = useState<Note[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
@@ -51,7 +85,7 @@ export default function Notebook() {
         </p>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
         {(['all', 'word', 'sentence'] as const).map((f) => (
           <button
             key={f}
@@ -64,6 +98,20 @@ export default function Notebook() {
           </button>
         ))}
         <span className="ml-auto text-xs text-slate-500">{filtered.length} 筆</span>
+        <button
+          onClick={() => exportNotes(filtered, 'anki')}
+          disabled={filtered.length === 0}
+          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 enabled:hover:bg-slate-800 disabled:opacity-40"
+        >
+          匯出 Anki
+        </button>
+        <button
+          onClick={() => exportNotes(filtered, 'csv')}
+          disabled={filtered.length === 0}
+          className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 enabled:hover:bg-slate-800 disabled:opacity-40"
+        >
+          匯出 CSV
+        </button>
       </div>
 
       {loading && <p className="text-sm text-slate-500">載入中…</p>}

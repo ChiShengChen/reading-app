@@ -22,6 +22,7 @@ import type {
 import { Link } from 'react-router-dom'
 import JpLookup from '../components/JpLookup'
 import EnLookup from '../components/EnLookup'
+import { cloudOcrTranslate, hasClaudeKey } from '../lib/cloud/claudeVlm'
 import { addNote, createBook, addPage, listBooks, type Book } from '../db/db'
 import { canvasToBlob, makeThumbnail } from '../lib/image/preprocess'
 import { errorMessage } from '../lib/errorMessage'
@@ -35,9 +36,12 @@ export default function Reader() {
   const [source, setSource] = useState<HTMLCanvasElement | null>(null)
   const [progress, setProgress] = useState<PipelineProgress | null>(null)
   const [result, setResult] = useState<PipelineResult | null>(null)
+  const [presetTrans, setPresetTrans] = useState<TranslateResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detCached, setDetCached] = useState(false)
   const [jaCached, setJaCached] = useState(false)
+  // Cloud (Claude) engine is available only when an API key is configured.
+  const [engine, setEngine] = useState<'local' | 'cloud'>(hasClaudeKey() ? 'cloud' : 'local')
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
 
@@ -69,13 +73,40 @@ export default function Reader() {
     setStep('running')
     setProgress({ stage: 'preprocess' })
     setError(null)
+    setPresetTrans(null)
     try {
       const cropped = cropCanvas(source, rect)
+      if (engine === 'cloud') {
+        setProgress({ stage: 'recognizing', message: '雲端辨識＋翻譯中（Claude）…' })
+        const cloud = await cloudOcrTranslate(cropped, lang)
+        setResult({
+          lang,
+          processed: cropped,
+          regions: cloud.pairs.map((p) => ({
+            box: { x: 0, y: 0, w: 0, h: 0 },
+            detScore: 1,
+            recScore: 1,
+            text: p.source,
+            sentences: [p.source],
+          })),
+          fullText: cloud.fullText,
+          sentences: cloud.pairs.map((p) => p.source),
+          usedFullPageFallback: false,
+        })
+        setPresetTrans({
+          engine: 'cloud',
+          pairs: cloud.pairs,
+          isSimplified: false,
+          convertedFromSimplified: false,
+        })
+        setStep('result')
+        return
+      }
       const res = await runOcr(cropped, lang, backend, setProgress)
       setResult(res)
       setStep('result')
     } catch (err) {
-      setError(`OCR 失敗：${errorMessage(err)}`)
+      setError(`${engine === 'cloud' ? '雲端' : ''}OCR 失敗：${errorMessage(err)}`)
       setStep('crop')
     }
   }
@@ -106,6 +137,29 @@ export default function Reader() {
           </span>
         </p>
       </div>
+
+      {/* Engine selector — local (offline) vs cloud Claude (best quality). */}
+      {(step === 'pick' || step === 'crop') && hasClaudeKey() && (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-slate-400">辨識引擎</span>
+          <div className="inline-flex overflow-hidden rounded border border-slate-600">
+            {(['local', 'cloud'] as const).map((e) => (
+              <button
+                key={e}
+                onClick={() => setEngine(e)}
+                className={`px-3 py-1.5 ${
+                  engine === e ? 'bg-violet-500 text-slate-900' : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {e === 'local' ? '本地（離線）' : '雲端 Claude'}
+              </button>
+            ))}
+          </div>
+          {engine === 'cloud' && (
+            <span className="text-xs text-amber-300">照片會上傳到 Anthropic（一步辨識＋翻譯）</span>
+          )}
+        </div>
+      )}
 
       {/* Language selector — picks the recognizer (en=Tesseract, ja=manga-ocr). */}
       {(step === 'pick' || step === 'crop') && (
@@ -198,7 +252,7 @@ export default function Reader() {
       )}
 
       {step === 'result' && result && (
-        <ResultView result={result} onReset={reset} />
+        <ResultView result={result} presetTrans={presetTrans} onReset={reset} />
       )}
     </div>
   )
@@ -236,15 +290,25 @@ function ProgressView({ progress }: { progress: PipelineProgress | null }) {
   )
 }
 
-function ResultView({ result, onReset }: { result: PipelineResult; onReset: () => void }) {
+function ResultView({
+  result,
+  presetTrans,
+  onReset,
+}: {
+  result: PipelineResult
+  presetTrans?: TranslateResult | null
+  onReset: () => void
+}) {
   const { backend } = useApp()
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const apiAvailable = hasTranslatorApi()
+  // Cloud results carry no detection boxes (zero-area) — overlay is just the image.
+  const hasBoxes = result.regions.some((r) => r.box.w > 0 && r.box.h > 0)
 
   const [enginePref, setEnginePref] = useState<EnginePreference>(apiAvailable ? 'auto' : 'opus-mt')
   const [translating, setTranslating] = useState(false)
   const [transProgress, setTransProgress] = useState<TranslateProgress | null>(null)
-  const [trans, setTrans] = useState<TranslateResult | null>(null)
+  const [trans, setTrans] = useState<TranslateResult | null>(presetTrans ?? null)
   const [transError, setTransError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -258,6 +322,7 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
     ctx.lineWidth = Math.max(2, processed.width / 400)
     ctx.font = `${Math.max(14, processed.width / 60)}px system-ui`
     regions.forEach((r, i) => {
+      if (r.box.w <= 0 || r.box.h <= 0) return
       ctx.strokeStyle = '#38bdf8'
       ctx.fillStyle = 'rgba(56,189,248,0.12)'
       ctx.fillRect(r.box.x, r.box.y, r.box.w, r.box.h)
@@ -305,7 +370,7 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <h3 className="mb-2 text-sm font-medium text-slate-300">
-            偵測區域（{result.regions.length}）
+            {hasBoxes ? `偵測區域（${result.regions.length}）` : '頁面影像'}
           </h3>
           <canvas ref={overlayRef} className="w-full rounded border border-slate-700" />
         </div>
@@ -321,8 +386,12 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
               <div key={i} className="rounded border border-slate-700 bg-slate-900/60 p-2">
                 <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
                   <span className="rounded bg-slate-700 px-1.5 text-slate-200">{i + 1}</span>
-                  <span>偵測 {(r.detScore * 100).toFixed(0)}%</span>
-                  <span>辨識 {(r.recScore * 100).toFixed(0)}%</span>
+                  {hasBoxes && (
+                    <>
+                      <span>偵測 {(r.detScore * 100).toFixed(0)}%</span>
+                      <span>辨識 {(r.recScore * 100).toFixed(0)}%</span>
+                    </>
+                  )}
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-slate-100">{r.text}</p>
               </div>
@@ -399,7 +468,11 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <span className="rounded bg-slate-700 px-1.5 py-0.5 text-slate-200">
-                {trans.engine === 'translator-api' ? '瀏覽器 Translator API' : 'Opus-MT'}
+                {trans.engine === 'translator-api'
+                  ? '瀏覽器 Translator API'
+                  : trans.engine === 'cloud'
+                    ? 'Claude（雲端）'
+                    : 'Opus-MT'}
               </span>
               {trans.convertedFromSimplified && (
                 <span className="text-slate-500">已由 OpenCC 簡→繁（zh-Hant）</span>

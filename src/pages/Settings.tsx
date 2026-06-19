@@ -5,6 +5,7 @@ import { MODEL_ENTRIES, type ModelEntry } from '../lib/models/registry'
 import { getMangaOcrModelId, setMangaOcrModel } from '../lib/ocr/recognizers'
 import { getDictDbUrl, setDictDbUrl } from '../lib/dict/jmdict'
 import { getEcdictDbUrl, setEcdictDbUrl } from '../lib/dict/ecdict'
+import { getClaudeKey, setClaudeKey, getClaudeModel, setClaudeModel } from '../lib/cloud/claudeVlm'
 
 export default function Settings() {
   const { capabilities, storage, preferredEngine, setPreferredEngine, backend } = useApp()
@@ -121,6 +122,27 @@ function AdvancedSection() {
         placeholder="https://huggingface.co/you/ecdict-sqlite/resolve/main/ecdict.sqlite"
         get={getEcdictDbUrl}
         set={setEcdictDbUrl}
+      />
+
+      <div className="border-t border-slate-800 pt-4">
+        <p className="text-xs font-medium text-slate-300">雲端 VLM（最佳品質，需自備 API key）</p>
+        <p className="mt-0.5 text-xs text-amber-300/80">
+          ⚠ 啟用後「閱讀」可切到雲端模式，會把書頁照片送到 Anthropic（非離線）。key 只存在本機。
+        </p>
+      </div>
+      <OverrideField
+        label="Claude API key"
+        hint="到 console.anthropic.com 取得。填入後「閱讀」頁會出現「雲端」引擎選項。留空停用。"
+        placeholder="sk-ant-..."
+        get={getClaudeKey}
+        set={setClaudeKey}
+      />
+      <OverrideField
+        label="Claude 模型"
+        hint="預設 claude-opus-4-8（最佳）。可改 claude-sonnet-4-6 省成本。留空回復預設。"
+        placeholder="claude-opus-4-8"
+        get={getClaudeModel}
+        set={setClaudeModel}
       />
     </section>
   )

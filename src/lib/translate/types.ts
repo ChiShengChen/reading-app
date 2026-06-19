@@ -6,7 +6,7 @@ export type { OcrLanguage }
 export const TARGET_LANG = 'zh-Hant' as const
 export type TargetLang = typeof TARGET_LANG
 
-export type TranslationEngine = 'translator-api' | 'opus-mt'
+export type TranslationEngine = 'translator-api' | 'opus-mt' | 'cloud'
 
 /** 'auto' resolves to translator-api when available (desktop), else opus-mt. */
 export type EnginePreference = TranslationEngine | 'auto'

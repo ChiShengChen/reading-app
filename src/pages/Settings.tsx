@@ -108,8 +108,9 @@ function AdvancedSection() {
       <label className="block text-xs text-slate-400">
         日文辨識模型 (Hugging Face repo id)
         <p className="mt-0.5 text-slate-500">
-          預設模型不完整、無法載入。轉好你自己的完整 ONNX 後（見 docs/convert-manga-ocr.md），
-          在此貼上 repo id，例如 <span className="text-slate-300">你的帳號/manga-ocr-base-ONNX</span>。
+          預設已指向一份完整的 manga-ocr ONNX。若要改用你自己轉好的版本
+          （見 docs/convert-manga-ocr.md），在此貼上 repo id，例如{' '}
+          <span className="text-slate-300">你的帳號/manga-ocr-base-ONNX</span>。留空則回復預設。
         </p>
         <div className="mt-2 flex gap-2">
           <input

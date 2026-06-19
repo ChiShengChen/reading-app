@@ -34,15 +34,28 @@ const createImageToText = pipeline as unknown as PipelineFactory
 // We always fetch from the hub; cache lives in the browser Cache API.
 env.allowLocalModels = false
 
-let DEFAULT_MANGA_OCR_MODEL = 'onnx-community/manga-ocr-base-ONNX'
-
-export function setMangaOcrModel(id: string) {
-  DEFAULT_MANGA_OCR_MODEL = id
-  pipePromise = null // force reload with the new id
-}
+// Fallback default (incomplete — see KNOWN GAP above). Users point this at
+// their own complete export (e.g. after running scripts/convert-manga-ocr.py).
+const FALLBACK_MANGA_OCR_MODEL = 'onnx-community/manga-ocr-base-ONNX'
+const LS_KEY = 'mangaOcrModelId'
 
 export function getMangaOcrModelId(): string {
-  return DEFAULT_MANGA_OCR_MODEL
+  try {
+    return localStorage.getItem(LS_KEY) || FALLBACK_MANGA_OCR_MODEL
+  } catch {
+    return FALLBACK_MANGA_OCR_MODEL
+  }
+}
+
+/** Persisted across reloads via localStorage; empty string resets to default. */
+export function setMangaOcrModel(id: string) {
+  try {
+    if (id.trim()) localStorage.setItem(LS_KEY, id.trim())
+    else localStorage.removeItem(LS_KEY)
+  } catch {
+    /* ignore */
+  }
+  pipePromise = null // force reload with the new id
 }
 
 let pipePromise: Promise<ImageToTextPipeline> | null = null
@@ -58,7 +71,7 @@ export async function loadMangaOcr(
   // Aggregate per-file download progress into a single 0..1 ratio.
   const files = new Map<string, { loaded: number; total: number }>()
 
-  pipePromise = createImageToText('image-to-text', DEFAULT_MANGA_OCR_MODEL, {
+  pipePromise = createImageToText('image-to-text', getMangaOcrModelId(), {
     device: backend === 'webgpu' ? 'webgpu' : 'wasm',
     // fp32 on WebGPU for quality; quantized on the WASM fallback for size/speed.
     dtype: backend === 'webgpu' ? 'fp32' : 'q8',

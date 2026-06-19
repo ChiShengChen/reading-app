@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../AppContext'
 import { formatBytes } from '../lib/storage'
 import { MODEL_ENTRIES, type ModelEntry } from '../lib/models/registry'
+import { getMangaOcrModelId, setMangaOcrModel } from '../lib/ocr/recognizers'
 
 export default function Settings() {
   const { capabilities, storage, preferredEngine, setPreferredEngine, backend } = useApp()
@@ -84,7 +85,51 @@ export default function Settings() {
           ))}
         </div>
       </section>
+
+      <AdvancedSection />
     </div>
+  )
+}
+
+/** Advanced overrides — e.g. point manga-ocr at your own complete ONNX export. */
+function AdvancedSection() {
+  const [model, setModel] = useState(getMangaOcrModelId())
+  const [saved, setSaved] = useState(false)
+
+  function save() {
+    setMangaOcrModel(model)
+    setModel(getMangaOcrModelId())
+    setSaved(true)
+  }
+
+  return (
+    <section className="space-y-3 rounded-lg border border-slate-700 p-4">
+      <h3 className="text-sm font-medium text-slate-200">進階</h3>
+      <label className="block text-xs text-slate-400">
+        日文辨識模型 (Hugging Face repo id)
+        <p className="mt-0.5 text-slate-500">
+          預設模型不完整、無法載入。轉好你自己的完整 ONNX 後（見 docs/convert-manga-ocr.md），
+          在此貼上 repo id，例如 <span className="text-slate-300">你的帳號/manga-ocr-base-ONNX</span>。
+        </p>
+        <div className="mt-2 flex gap-2">
+          <input
+            value={model}
+            onChange={(e) => {
+              setModel(e.target.value)
+              setSaved(false)
+            }}
+            placeholder="username/manga-ocr-base-ONNX"
+            className="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+          />
+          <button
+            onClick={save}
+            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-sky-400"
+          >
+            {saved ? '已儲存 ✓' : '儲存'}
+          </button>
+        </div>
+      </label>
+    </section>
   )
 }
 

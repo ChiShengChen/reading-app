@@ -88,10 +88,20 @@ function preprocess(src: HTMLCanvasElement): Resized {
   return { data: chw, w, h, scaleX: src.width / w, scaleY: src.height / h }
 }
 
-/** Connected-components bounding boxes over a binary mask (4-connectivity). */
-function findBoxes(prob: Float32Array, w: number, h: number): Box[] {
+interface RawBox extends Box {
+  /** Mean probability over the component's actual ink pixels (DB box score). */
+  score: number
+}
+
+/**
+ * Connected-components boxes over the binary mask (4-connectivity). The score is
+ * the mean probability over the component's PIXELS (not the bounding rectangle)
+ * — a rectangle mean penalizes long lines for their inter-word whitespace and
+ * was systematically dropping full-width lines.
+ */
+function findBoxes(prob: Float32Array, w: number, h: number): RawBox[] {
   const visited = new Uint8Array(w * h)
-  const boxes: Box[] = []
+  const boxes: RawBox[] = []
   const stack: number[] = []
 
   for (let start = 0; start < w * h; start++) {
@@ -100,6 +110,8 @@ function findBoxes(prob: Float32Array, w: number, h: number): Box[] {
     let minY = h
     let maxX = 0
     let maxY = 0
+    let sumP = 0
+    let cnt = 0
     stack.push(start)
     visited[start] = 1
     while (stack.length) {
@@ -110,6 +122,8 @@ function findBoxes(prob: Float32Array, w: number, h: number): Box[] {
       if (y < minY) minY = y
       if (x > maxX) maxX = x
       if (y > maxY) maxY = y
+      sumP += prob[idx]
+      cnt++
       // 4-neighbours
       if (x > 0) tryPush(idx - 1)
       if (x < w - 1) tryPush(idx + 1)
@@ -119,7 +133,7 @@ function findBoxes(prob: Float32Array, w: number, h: number): Box[] {
     const bw = maxX - minX + 1
     const bh = maxY - minY + 1
     if (Math.min(bw, bh) >= MIN_BOX_SIDE) {
-      boxes.push({ x: minX, y: minY, w: bw, h: bh })
+      boxes.push({ x: minX, y: minY, w: bw, h: bh, score: cnt ? sumP / cnt : 0 })
     }
   }
   return boxes
@@ -130,19 +144,6 @@ function findBoxes(prob: Float32Array, w: number, h: number): Box[] {
       stack.push(n)
     }
   }
-}
-
-function meanProb(prob: Float32Array, w: number, box: Box): number {
-  let sum = 0
-  let count = 0
-  for (let y = box.y; y < box.y + box.h; y++) {
-    const row = y * w
-    for (let x = box.x; x < box.x + box.w; x++) {
-      sum += prob[row + x]
-      count++
-    }
-  }
-  return count ? sum / count : 0
 }
 
 /** Expand a box outward (DB "unclip") and clamp to original image bounds. */
@@ -185,8 +186,7 @@ export async function detect(
   const rawBoxes = findBoxes(prob, pw, ph)
   const regions: DetectedRegion[] = []
   for (const b of rawBoxes) {
-    const score = meanProb(prob, pw, b)
-    if (score < BOX_THRESH) continue // Critical Rule #2: gate low-confidence regions
+    if (b.score < BOX_THRESH) continue // gate low-confidence regions (pixel-mean score)
     // Map detection-space box -> original-image pixels, then unclip.
     const mapped: Box = {
       x: b.x * scaleX,
@@ -194,7 +194,7 @@ export async function detect(
       w: b.w * scaleX,
       h: b.h * scaleY,
     }
-    regions.push({ box: unclip(mapped, src.width, src.height), detScore: score })
+    regions.push({ box: unclip(mapped, src.width, src.height), detScore: b.score })
   }
 
   // Reading order: top-to-bottom, then left-to-right (rough line grouping).

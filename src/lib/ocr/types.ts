@@ -53,6 +53,8 @@ export interface PipelineResult {
   sentences: string[]
   /** True when detection was skipped and we OCR'd the whole image. */
   usedFullPageFallback: boolean
+  /** Detection error message (load/run failure), when detection didn't run. */
+  detectError?: string
   /** The enhanced canvas the region boxes are expressed in (for overlay). */
   processed: HTMLCanvasElement
 }

@@ -11,6 +11,7 @@
  * hallucinates (Critical Rule #2); instead we report that detection is required.
  */
 import type { ComputeBackend } from '../capabilities'
+import { errorMessage } from '../errorMessage'
 import { enhanceForOcr, cropCanvas } from '../image/preprocess'
 import { splitSentences } from '../text/sentences'
 import { detect } from './detector'
@@ -28,18 +29,40 @@ export async function runOcr(
   onProgress?: ProgressCallback,
 ): Promise<PipelineResult> {
   onProgress?.({ stage: 'preprocess', message: '影像強化中…' })
-  const enhanced = enhanceForOcr(cropped, { deskew: true })
+  const enhanced = enhanceForOcr(cropped, { deskew: false })
 
   let detected: { box: Box; detScore: number }[] = []
   let detectionFailed = false
+  let detectError: string | undefined
 
   try {
     onProgress?.({ stage: 'loading-detector', message: '載入偵測模型…' })
     onProgress?.({ stage: 'detecting', message: '偵測文字區域…' })
     detected = await detect(enhanced, backend)
+    // WebGPU sometimes loads the session but yields an empty/garbage map on
+    // some GPUs; retry once on WASM before giving up.
+    if (detected.length === 0 && backend === 'webgpu') {
+      onProgress?.({ stage: 'detecting', message: '偵測無結果，改用 WASM 重試…' })
+      try {
+        detected = await detect(enhanced, 'wasm')
+      } catch (err2) {
+        console.warn('[pipeline] wasm detection retry failed:', err2)
+      }
+    }
   } catch (err) {
     console.warn('[pipeline] detection unavailable:', err)
     detectionFailed = true
+    detectError = errorMessage(err)
+    // Try WASM as a fallback execution provider.
+    try {
+      onProgress?.({ stage: 'detecting', message: '偵測（WebGPU）失敗，改用 WASM 重試…' })
+      detected = await detect(enhanced, 'wasm')
+      detectionFailed = false
+      detectError = undefined
+    } catch (err2) {
+      console.warn('[pipeline] wasm detection retry failed:', err2)
+      detectError = errorMessage(err2)
+    }
   }
 
   // For Japanese, manga-ocr MUST run on detected regions only. If detection is
@@ -112,5 +135,13 @@ export async function runOcr(
   const sentences = regions.flatMap((r) => r.sentences)
   onProgress?.({ stage: 'done', ratio: 1, message: `完成，取得 ${regions.length} 個區域` })
 
-  return { lang, regions, fullText, sentences, usedFullPageFallback: fallback, processed: enhanced }
+  return {
+    lang,
+    regions,
+    fullText,
+    sentences,
+    usedFullPageFallback: fallback,
+    detectError,
+    processed: enhanced,
+  }
 }

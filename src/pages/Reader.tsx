@@ -260,8 +260,9 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
     <div className="space-y-4">
       {result.usedFullPageFallback && (
         <div className="rounded border border-amber-700 bg-amber-950/30 p-3 text-xs text-amber-200">
-          偵測模型未啟用或未找到區域，已改用「整頁辨識」後備流程（僅英文、僅供端到端驗證）。
-          設定正確的偵測模型 URL 後即會走兩階段流程。
+          {result.detectError
+            ? `偵測失敗，已改用「整頁辨識」後備：${result.detectError}`
+            : '偵測到 0 個文字區域，已改用「整頁辨識」後備（整頁對斜拍／彎曲書頁辨識較差）。請盡量正面、平整、光線充足地拍攝，或更換偵測模型。'}
         </div>
       )}
 

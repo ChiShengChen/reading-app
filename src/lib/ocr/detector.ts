@@ -25,7 +25,7 @@ const STD = [0.229, 0.224, 0.225]
 
 // DB postprocessing params.
 const BIN_THRESH = 0.3
-const BOX_THRESH = 0.5
+const BOX_THRESH = 0.35
 const UNCLIP_RATIO = 1.6
 const MIN_BOX_SIDE = 6
 const MAX_SIDE = 960 // resize long side cap for detection
@@ -165,8 +165,16 @@ export async function detect(
   const output = await session.run(feeds)
   const probTensor = output[session.outputNames[0]]
   const prob = probTensor.data as Float32Array
-  // Output is [1,1,h,w]; same spatial size as input for DBNet.
-  const [, , ph, pw] = probTensor.dims
+  // DBNet output is [1,1,H,W] (or [1,H,W]); take the last two dims as H,W and
+  // sanity-check the buffer size so a shape mismatch can't silently yield junk.
+  const dims = probTensor.dims
+  const ph = dims[dims.length - 2]
+  const pw = dims[dims.length - 1]
+  if (!ph || !pw || prob.length < ph * pw) {
+    throw new Error(
+      `偵測輸出形狀非預期：dims=[${dims.join(',')}], len=${prob.length}（模型可能不相容）`,
+    )
+  }
 
   const rawBoxes = findBoxes(prob, pw, ph)
   const regions: DetectedRegion[] = []

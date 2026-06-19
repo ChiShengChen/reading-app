@@ -147,10 +147,11 @@ function meanProb(prob: Float32Array, w: number, box: Box): number {
 
 /** Expand a box outward (DB "unclip") and clamp to original image bounds. */
 function unclip(box: Box, origW: number, origH: number): Box {
-  // Approximate unclip with a proportional padding (axis-aligned).
-  const pad = ((UNCLIP_RATIO - 1) / 2)
-  const px = box.w * pad
-  const py = box.h * pad
+  // Pad horizontally (don't clip first/last glyphs) but keep VERTICAL padding
+  // tiny — too much vertical growth swallows the previous line's descenders and
+  // makes each line crop OCR into a garbage extra line.
+  const px = box.w * ((UNCLIP_RATIO - 1) / 2)
+  const py = box.h * 0.06
   const x = Math.max(0, box.x - px)
   const y = Math.max(0, box.y - py)
   const w = Math.min(origW - x, box.w + 2 * px)

@@ -10,13 +10,11 @@
  * Weights are ~440MB (Critical Rule #5) and downloaded lazily on first JP use,
  * cached by Transformers.js in the browser Cache API (offline afterwards).
  *
- * KNOWN GAP (verified 2026-06): there is no COMPLETE public Transformers.js
- * manga-ocr export. The closest, `onnx-community/manga-ocr-base-ONNX`, ships
- * encoder/decoder ONNX but is MISSING `onnx/decoder_model_merged.onnx` (which
- * Transformers.js Vision2Seq requires) AND the tokenizer files — so loading it
- * currently fails. Japanese RECOGNITION is therefore not yet functional; the
- * detection + English paths and JP *translation* (pivot) are unaffected.
- * Plug in a complete export via setMangaOcrModel() once one is hosted.
+ * The public manga-ocr ONNX repos were incomplete for Transformers.js (no
+ * decoder_model_merged, and only a MeCab BertJapaneseTokenizer with no fast
+ * tokenizer.json). We built a complete export — see scripts/convert-manga-ocr.py
+ * + scripts/add-manga-ocr-tokenizer.py — hosted at the default below. Override
+ * with your own via setMangaOcrModel() / 設定→進階.
  */
 import { pipeline, RawImage, env, type ImageToTextPipeline } from '@huggingface/transformers'
 import type { ComputeBackend } from '../../capabilities'
@@ -34,9 +32,9 @@ const createImageToText = pipeline as unknown as PipelineFactory
 // We always fetch from the hub; cache lives in the browser Cache API.
 env.allowLocalModels = false
 
-// Fallback default (incomplete — see KNOWN GAP above). Users point this at
-// their own complete export (e.g. after running scripts/convert-manga-ocr.py).
-const FALLBACK_MANGA_OCR_MODEL = 'onnx-community/manga-ocr-base-ONNX'
+// Complete export (encoder + decoder_model_merged + q8 + tokenizer.json +
+// preprocessor). Override via setMangaOcrModel() / 設定→進階.
+const FALLBACK_MANGA_OCR_MODEL = 'ms57rd/manga-ocr-base-ONNX'
 const LS_KEY = 'mangaOcrModelId'
 
 export function getMangaOcrModelId(): string {

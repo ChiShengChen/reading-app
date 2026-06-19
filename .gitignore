@@ -16,3 +16,11 @@ public/dict-db/
 *.log
 .vscode/
 .idea/
+
+# Python conversion artifacts (models live on Hugging Face, not in git)
+venv/
+__pycache__/
+manga-ocr-onnx/
+manga-ocr-extra/
+extra/
+*.onnx

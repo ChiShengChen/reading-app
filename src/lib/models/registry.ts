@@ -106,7 +106,7 @@ export const MODEL_ENTRIES: ModelEntry[] = [
   },
   {
     id: 'manga-ocr',
-    label: '日文辨識（manga-ocr，尚無完整線上模型）',
+    label: '日文辨識（manga-ocr）',
     scope: '日文',
     approxBytes: 440 * MB,
     large: true,

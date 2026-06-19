@@ -35,10 +35,21 @@ huggingface-cli upload <your-username>/manga-ocr-base-ONNX manga-ocr-onnx .
 
 建立 repo 時若被問公開/私有，選 **public**（App 是純前端、用匿名下載；私有 repo 無法匿名抓）。
 
+### 若你已上傳但缺 tokenizer.json / preprocessor_config.json
+manga-ocr 的 tokenizer 是 MeCab 版 `BertJapaneseTokenizer`，沒有 fast `tokenizer.json`、
+也無法自動轉換；但 MeCab 只用於「編碼」，OCR 只需「解碼」(id→字)，所以用 vocab.txt
+建一份 WordPiece `tokenizer.json` 即可。最新 `convert-manga-ocr.py` 已內建此步；
+若你之前上傳的版本缺這兩個小檔，**不用重傳大檔**，只要補上：
+
+```bash
+python scripts/add-manga-ocr-tokenizer.py --dst <your-username>/manga-ocr-base-ONNX
+```
+
 ## 在 App 啟用
-打開 https://chishengchen.github.io/reading-app/ → **設定 → 進階 → 日文辨識模型**，
+本 App 預設已指向 `ms57rd/manga-ocr-base-ONNX`，若那是你的 repo 就直接可用。
+否則打開 https://chishengchen.github.io/reading-app/ → **設定 → 進階 → 日文辨識模型**，
 貼上 `you/manga-ocr-base-ONNX` → 儲存。回設定頁的「日文辨識」按下載，
-之後日文 OCR 就能用（手機走 WASM 會用 `_quantized` 版，桌機 WebGPU 用 fp32 版）。
+之後日文 OCR 就能用（手機走 WASM 用 `_quantized` 版，桌機 WebGPU 用 fp32 版）。
 
 ## 疑難排解
 - **`ValueError: ... decoder ... is bert which does not need past key values`**：已修正。

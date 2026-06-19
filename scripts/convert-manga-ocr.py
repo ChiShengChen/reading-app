@@ -24,16 +24,6 @@ import shutil
 import sys
 from pathlib import Path
 
-ROOT_FILES = [
-    "config.json",
-    "generation_config.json",
-    "preprocessor_config.json",
-    "tokenizer.json",
-    "tokenizer_config.json",
-    "vocab.txt",
-    "special_tokens_map.json",
-]
-
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -90,19 +80,38 @@ def main() -> int:
     else:
         print("[3/4] Skipping quantization (fp32 only).")
 
-    # 4) Copy config/tokenizer/preprocessor to the repo root; guarantee tokenizer.json.
-    print("[4/4] Copying config + tokenizer + preprocessor to repo root…")
-    for f in ROOT_FILES:
-        src = raw / f
-        if src.exists():
-            shutil.copy2(src, out / f)
-    # Re-save tokenizer to guarantee a fast tokenizer.json exists.
-    try:
-        from transformers import AutoTokenizer
+    # 4) config + preprocessor + tokenizer at repo root.
+    #
+    # manga-ocr's tokenizer is a BertJapaneseTokenizer (MeCab word-tokenizer);
+    # it has NO fast tokenizer.json and cannot be auto-converted. BUT MeCab is
+    # only used to *encode* text — OCR only *decodes* ids->characters, which just
+    # needs the vocab. So we build a plain WordPiece tokenizer.json from vocab.txt
+    # (decode-only); that is what Transformers.js loads.
+    print("[4/4] Writing config + preprocessor + (decode-only) tokenizer.json…")
+    from huggingface_hub import hf_hub_download
+    from transformers import BertTokenizerFast
 
-        AutoTokenizer.from_pretrained(args.model_id).save_pretrained(str(out))
-    except Exception as e:  # noqa: BLE001
-        print(f"WARN: tokenizer re-save failed ({e}); relying on copied files.")
+    # config.json / generation_config.json come from optimum's export.
+    for f in ("config.json", "generation_config.json"):
+        if (raw / f).exists():
+            shutil.copy2(raw / f, out / f)
+
+    # ViT image preprocessor — copy verbatim from the source model.
+    shutil.copy2(hf_hub_download(args.model_id, "preprocessor_config.json"), out / "preprocessor_config.json")
+
+    # Fast WordPiece tokenizer.json from the original vocab (decode path only).
+    vocab_path = hf_hub_download(args.model_id, "vocab.txt")
+    BertTokenizerFast(
+        vocab_file=vocab_path,
+        do_lower_case=False,
+        strip_accents=False,
+        tokenize_chinese_chars=True,
+        unk_token="[UNK]",
+        sep_token="[SEP]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
+    ).save_pretrained(str(out))
 
     shutil.rmtree(raw, ignore_errors=True)
 

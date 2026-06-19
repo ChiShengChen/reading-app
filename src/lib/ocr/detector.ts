@@ -14,8 +14,10 @@ import type { ComputeBackend } from '../capabilities'
 import { fetchModel, getDetModelSpec, type DownloadProgress } from './modelManager'
 import type { Box, DetectedRegion } from './types'
 
-// Serve ORT's wasm/jsep binaries from public/ort (see scripts/sync-ort.mjs).
-ort.env.wasm.wasmPaths = '/ort/'
+// Serve ORT's wasm/jsep binaries from <base>/ort (synced into public/ort).
+// Must honour the Vite base path (e.g. GitHub Pages '/reading-app/'), else the
+// WebGPU/WASM binaries 404 and the detector fails to initialise.
+ort.env.wasm.wasmPaths = `${import.meta.env.BASE_URL}ort/`
 
 // ImageNet normalization used by PaddleOCR det.
 const MEAN = [0.485, 0.456, 0.406]

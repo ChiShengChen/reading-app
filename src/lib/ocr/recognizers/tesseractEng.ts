@@ -11,9 +11,10 @@
 import { createWorker, type Worker } from 'tesseract.js'
 import type { RecognitionOutput, LoadProgressCallback } from './types'
 
-// Self-hosted worker + core; remote-but-cached language data.
-const WORKER_PATH = '/tesseract/worker.min.js'
-const CORE_PATH = '/tesseract/core'
+// Self-hosted worker + core (honour Vite base path, e.g. '/reading-app/').
+const BASE = import.meta.env.BASE_URL
+const WORKER_PATH = `${BASE}tesseract/worker.min.js`
+const CORE_PATH = `${BASE}tesseract/core`
 let LANG_PATH = 'https://tessdata.projectnaptha.com/4.0.0'
 
 export function setTesseractLangPath(url: string) {

@@ -22,7 +22,8 @@ export interface JpToken {
   isWord: boolean
 }
 
-const DICT_PATH = '/dict'
+// Honour the Vite base path (e.g. GitHub Pages '/reading-app/').
+const DICT_PATH = `${import.meta.env.BASE_URL}dict`
 
 let tokenizerPromise: Promise<Tokenizer<IpadicFeatures> | null> | null = null
 

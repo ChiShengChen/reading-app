@@ -17,6 +17,7 @@ import JpLookup from '../components/JpLookup'
 import EnLookup from '../components/EnLookup'
 import { addNote, createBook, addPage, listBooks, type Book } from '../db/db'
 import { canvasToBlob, makeThumbnail } from '../lib/image/preprocess'
+import { errorMessage } from '../lib/errorMessage'
 
 type Step = 'pick' | 'crop' | 'running' | 'result'
 
@@ -51,7 +52,7 @@ export default function Reader() {
       setSource(bitmapToCanvas(bmp))
       setStep('crop')
     } catch (err) {
-      setError(`無法讀取影像：${(err as Error).message}`)
+      setError(`無法讀取影像：${errorMessage(err)}`)
     }
   }
 
@@ -66,7 +67,7 @@ export default function Reader() {
       setResult(res)
       setStep('result')
     } catch (err) {
-      setError(`OCR 失敗：${(err as Error).message}`)
+      setError(`OCR 失敗：${errorMessage(err)}`)
       setStep('crop')
     }
   }
@@ -249,7 +250,7 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
       )
       setTrans(r)
     } catch (err) {
-      setTransError((err as Error).message)
+      setTransError(errorMessage(err))
     } finally {
       setTranslating(false)
     }

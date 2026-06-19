@@ -78,7 +78,7 @@ function loadDb(): Promise<Database | null> {
   if (dbPromise) return dbPromise
   dbPromise = (async () => {
     try {
-      const SQL = await initSqlJs({ locateFile: (f) => `/sqljs/${f}` })
+      const SQL = await initSqlJs({ locateFile: (f) => `${import.meta.env.BASE_URL}sqljs/${f}` })
       return new SQL.Database(await fetchDbBytes())
     } catch (err) {
       console.warn('[ecdict] dictionary unavailable:', err)

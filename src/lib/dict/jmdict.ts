@@ -95,7 +95,7 @@ function loadDb(): Promise<Database | null> {
   if (dbPromise) return dbPromise
   dbPromise = (async () => {
     try {
-      const SQL = await initSqlJs({ locateFile: (f) => `/sqljs/${f}` })
+      const SQL = await initSqlJs({ locateFile: (f) => `${import.meta.env.BASE_URL}sqljs/${f}` })
       const bytes = await fetchDbBytes()
       return new SQL.Database(bytes)
     } catch (err) {

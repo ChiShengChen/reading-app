@@ -4,6 +4,7 @@
  */
 import type { ComputeBackend } from '../../capabilities'
 import { recognizeEng, disposeTesseract } from './tesseractEng'
+import { recognizePaddleEn, disposePaddleRec } from './paddleRec'
 import {
   recognizeJpn,
   loadMangaOcr,
@@ -14,8 +15,33 @@ import type { OcrLanguage, RecognitionOutput, LoadProgressCallback } from './typ
 
 export type { OcrLanguage, RecognitionOutput, LoadProgressCallback } from './types'
 export { setMangaOcrModel, getMangaOcrModelId, loadMangaOcr } from './mangaOcr'
-
+export {
+  getPaddleRecUrl,
+  setPaddleRecUrl,
+  getPaddleDictUrl,
+  setPaddleDictUrl,
+} from './paddleRec'
 export { recognizeEng } from './tesseractEng'
+
+// Which engine recognizes English line crops. PaddleOCR PP-OCRv5 (CTC) is the
+// default — faster + usually more accurate on printed text than Tesseract.
+export type EnglishRecognizer = 'paddle' | 'tesseract'
+const LS_EN = 'englishRecognizer'
+
+export function getEnglishRecognizer(): EnglishRecognizer {
+  try {
+    return localStorage.getItem(LS_EN) === 'tesseract' ? 'tesseract' : 'paddle'
+  } catch {
+    return 'paddle'
+  }
+}
+export function setEnglishRecognizer(v: EnglishRecognizer) {
+  try {
+    localStorage.setItem(LS_EN, v)
+  } catch {
+    /* ignore */
+  }
+}
 
 export async function recognizeRegion(
   canvas: HTMLCanvasElement,
@@ -23,7 +49,10 @@ export async function recognizeRegion(
   detScore: number,
   backend: ComputeBackend,
 ): Promise<RecognitionOutput> {
-  return lang === 'ja' ? recognizeJpn(canvas, detScore, backend) : recognizeEng(canvas)
+  if (lang === 'ja') return recognizeJpn(canvas, detScore, backend)
+  return getEnglishRecognizer() === 'paddle'
+    ? recognizePaddleEn(canvas, backend)
+    : recognizeEng(canvas)
 }
 
 /** Warm up the recognizer for a language (so download progress is visible). */
@@ -40,6 +69,7 @@ export async function preloadRecognizer(
 
 export async function disposeRecognizers() {
   await Promise.all([disposeTesseract(), disposeMangaOcr()])
+  disposePaddleRec()
 }
 
 /**

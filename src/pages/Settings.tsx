@@ -6,6 +6,16 @@ import { getMangaOcrModelId, setMangaOcrModel } from '../lib/ocr/recognizers'
 import { getDictDbUrl, setDictDbUrl } from '../lib/dict/jmdict'
 import { getEcdictDbUrl, setEcdictDbUrl } from '../lib/dict/ecdict'
 import { getClaudeKey, setClaudeKey, getClaudeModel, setClaudeModel } from '../lib/cloud/claudeVlm'
+import {
+  getEnglishRecognizer,
+  setEnglishRecognizer,
+  getPaddleRecUrl,
+  setPaddleRecUrl,
+  getPaddleDictUrl,
+  setPaddleDictUrl,
+  type EnglishRecognizer,
+} from '../lib/ocr/recognizers'
+import { getDetModelUrl, setDetModelUrl } from '../lib/ocr/modelManager'
 
 export default function Settings() {
   const { capabilities, storage, preferredEngine, setPreferredEngine, backend } = useApp()
@@ -125,6 +135,32 @@ function AdvancedSection() {
       />
 
       <div className="border-t border-slate-800 pt-4">
+        <p className="text-xs font-medium text-slate-300">本地辨識引擎與模型（進階）</p>
+      </div>
+      <RecognizerSelect />
+      <OverrideField
+        label="文字偵測模型 (ONNX URL)"
+        hint="PaddleOCR 偵測模型。可換成其他相容的 DBNet ONNX；留空回復預設。"
+        placeholder="https://huggingface.co/.../det.onnx"
+        get={getDetModelUrl}
+        set={setDetModelUrl}
+      />
+      <OverrideField
+        label="英文 PaddleOCR rec 模型 (ONNX URL)"
+        hint="英文辨識引擎選 PaddleOCR 時使用。換模型時字典也要一起換。留空回復預設。"
+        placeholder="https://huggingface.co/.../rec.onnx"
+        get={getPaddleRecUrl}
+        set={setPaddleRecUrl}
+      />
+      <OverrideField
+        label="英文 PaddleOCR 字典 (txt URL)"
+        hint="與上面 rec 模型配對的字元字典（每行一字）。留空回復預設。"
+        placeholder="https://huggingface.co/.../dict.txt"
+        get={getPaddleDictUrl}
+        set={setPaddleDictUrl}
+      />
+
+      <div className="border-t border-slate-800 pt-4">
         <p className="text-xs font-medium text-slate-300">雲端 VLM（最佳品質，需自備 API key）</p>
         <p className="mt-0.5 text-xs text-amber-300/80">
           ⚠ 啟用後「閱讀」可切到雲端模式，會把書頁照片送到 Anthropic（非離線）。key 只存在本機。
@@ -145,6 +181,30 @@ function AdvancedSection() {
         set={setClaudeModel}
       />
     </section>
+  )
+}
+
+function RecognizerSelect() {
+  const [value, setValue] = useState<EnglishRecognizer>(getEnglishRecognizer())
+  return (
+    <label className="block text-xs text-slate-400">
+      英文辨識引擎
+      <p className="mt-0.5 text-slate-500">
+        PaddleOCR(預設)：CTC、又快又準、手機友善。Tesseract：成熟穩定，含整頁版面分析。
+      </p>
+      <select
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value as EnglishRecognizer
+          setValue(v)
+          setEnglishRecognizer(v)
+        }}
+        className="mt-2 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-200"
+      >
+        <option value="paddle">PaddleOCR PP-OCRv5（推薦）</option>
+        <option value="tesseract">Tesseract</option>
+      </select>
+    </label>
   )
 }
 

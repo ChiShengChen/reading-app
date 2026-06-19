@@ -172,10 +172,13 @@ interface Oriented {
 async function sampleConfidence(
   img: HTMLCanvasElement,
   boxes: { box: Box; detScore: number }[],
+  backend: ComputeBackend,
 ): Promise<number> {
   if (boxes.length === 0) return 0
   const widest = boxes.reduce((a, b) => (b.box.w > a.box.w ? b : a))
-  const out = await recognizeEng(deskewCanvas(cropCanvas(img, widest.box)))
+  // Use the selected English engine (PaddleOCR/Tesseract) so paddle-only mode
+  // doesn't also spin up Tesseract just for the orientation probe.
+  const out = await recognizeRegion(deskewCanvas(cropCanvas(img, widest.box)), 'en', 1, backend)
   return out.score
 }
 
@@ -191,7 +194,7 @@ async function autoOrientEn(
 ): Promise<Oriented> {
   const portraitFrac =
     detected.filter((d) => d.box.h > d.box.w * 1.3).length / detected.length
-  const baseScore = await sampleConfidence(enhanced, detected)
+  const baseScore = await sampleConfidence(enhanced, detected, backend)
 
   // Looks upright and reads well — keep it (1 sample call, no rotation).
   if (portraitFrac < 0.5 && baseScore >= 0.55) return { enhanced, detected }
@@ -202,7 +205,7 @@ async function autoOrientEn(
       const rot = rotate90(enhanced, clockwise)
       const boxes = await detect(rot, backend)
       if (boxes.length === 0) continue
-      const score = await sampleConfidence(rot, boxes)
+      const score = await sampleConfidence(rot, boxes, backend)
       if (score > best.score) best = { enhanced: rot, detected: boxes, score }
     } catch (err) {
       console.warn('[pipeline] orientation probe failed:', err)

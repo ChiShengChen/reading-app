@@ -27,16 +27,29 @@ export interface ModelSpec {
 export const DEFAULT_DET_MODEL_URL =
   'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/detection/v5/det.onnx'
 
-let detModelUrl = DEFAULT_DET_MODEL_URL
+const LS_DET = 'detModelUrl'
+
+export function getDetModelUrl(): string {
+  try {
+    return localStorage.getItem(LS_DET) || DEFAULT_DET_MODEL_URL
+  } catch {
+    return DEFAULT_DET_MODEL_URL
+  }
+}
 
 export function setDetModelUrl(url: string) {
-  detModelUrl = url
+  try {
+    if (url.trim()) localStorage.setItem(LS_DET, url.trim())
+    else localStorage.removeItem(LS_DET)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function getDetModelSpec(): ModelSpec {
   return {
     id: 'paddle-det-v4',
-    url: detModelUrl,
+    url: getDetModelUrl(),
     approxBytes: 4.7 * 1024 * 1024,
     label: 'PaddleOCR 偵測模型 (PP-OCRv5 det)',
   }

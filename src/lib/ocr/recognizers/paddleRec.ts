@@ -15,7 +15,9 @@ import type { RecognitionOutput } from './types'
 
 const BASE = import.meta.env.BASE_URL
 ort.env.wasm.wasmPaths = `${BASE}ort/`
-ort.env.wasm.numThreads = 1 // no SharedArrayBuffer on GitHub Pages
+ort.env.wasm.numThreads = globalThis.crossOriginIsolated
+  ? Math.min(4, navigator.hardwareConcurrency || 4)
+  : 1
 ort.env.wasm.proxy = false
 
 const REC_BASE = 'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english'

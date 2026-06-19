@@ -14,13 +14,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // Custom SW (injectManifest) so it can add COOP/COEP headers → enables
+      // SharedArrayBuffer → multi-threaded WASM (much faster Tesseract/ORT on
+      // GitHub Pages, which can't set those headers server-side).
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
-      // Models are large and downloaded on demand into Cache Storage / IndexedDB
-      // by our own model manager, NOT precached by the service worker.
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        // Self-hosted runtime assets (incl. tesseract's large base64 *.wasm.js)
-        // are runtime-cached on demand, not precached at install time.
         globIgnores: [
           '**/ort/**',
           '**/dict/**',
@@ -28,44 +30,7 @@ export default defineConfig({
           '**/tesseract/**',
           '**/dict-db/**',
         ],
-        // Big model/runtime files are runtime-cached (below), not precached.
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        navigateFallbackDenylist: [/^\/(ort|dict|sqljs|tesseract|dict-db|models)\//],
-        runtimeCaching: [
-          {
-            // Self-hosted runtime assets: ORT wasm, kuromoji dict, sql.js wasm,
-            // tesseract worker/core, JMdict sqlite — cache once, serve offline.
-            urlPattern: /\/(ort|dict|sqljs|tesseract|dict-db)\//,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'app-runtime-assets',
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Bundled wasm emitted into /assets (e.g. transformers.js ORT).
-            urlPattern: /\/assets\/.*\.wasm$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'app-wasm',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Remote model weights / language data (Hugging Face, tessdata, CDN).
-            urlPattern:
-              /^https:\/\/(huggingface\.co|cdn\.jsdelivr\.net|tessdata\.projectnaptha\.com)\//,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'remote-models',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-              rangeRequests: true,
-            },
-          },
-        ],
       },
       manifest: {
         name: '書影閱讀器',

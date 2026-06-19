@@ -38,7 +38,9 @@ env.allowLocalModels = false
   const wasm = (env.backends as { onnx?: { wasm?: { numThreads?: number; proxy?: boolean } } })?.onnx
     ?.wasm
   if (wasm) {
-    wasm.numThreads = 1
+    wasm.numThreads = globalThis.crossOriginIsolated
+      ? Math.min(4, navigator.hardwareConcurrency || 4)
+      : 1
     wasm.proxy = false
   }
 }

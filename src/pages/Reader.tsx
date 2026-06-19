@@ -10,7 +10,8 @@ import {
 } from '../lib/image/preprocess'
 import { runOcr } from '../lib/ocr/pipeline'
 import { getDetModelSpec, isModelCached } from '../lib/ocr/modelManager'
-import { isMangaOcrCached } from '../lib/ocr/recognizers'
+import { isMangaOcrCached, disposeRecognizers } from '../lib/ocr/recognizers'
+import { disposeDetector } from '../lib/ocr/detector'
 import type { OcrLanguage, PipelineProgress, PipelineResult } from '../lib/ocr/types'
 import { translateSentences, hasTranslatorApi } from '../lib/translate'
 import type {
@@ -271,6 +272,10 @@ function ResultView({ result, onReset }: { result: PipelineResult; onReset: () =
     setTranslating(true)
     setTransError(null)
     setTrans(null)
+    // Free the OCR engines (Tesseract worker + ORT detector session) before
+    // loading the translation model — keeping all of them resident OOM-crashes
+    // the tab on phones.
+    await Promise.allSettled([disposeRecognizers(), disposeDetector()])
     try {
       const r = await translateSentences(
         result.sentences,

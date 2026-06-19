@@ -55,7 +55,9 @@ export async function loadOpusModel(
   const files = new Map<string, { loaded: number; total: number }>()
   const pipe = createTranslator('translation', modelId, {
     device: backend === 'webgpu' ? 'webgpu' : 'wasm',
-    dtype: backend === 'webgpu' ? 'fp32' : 'q8',
+    // Always q8: fp32 on a phone (on top of the OCR engines) blows memory and
+    // crashes the tab. q8 is ~1/4 the size and plenty for MT quality.
+    dtype: 'q8',
     progress_callback: onProgress
       ? (p: unknown) => {
           const e = p as { file?: string; loaded?: number; total?: number }

@@ -51,12 +51,15 @@ export interface EnhanceOptions {
   deskew?: boolean
   /** Otsu binarization (helps some recognizers, can hurt others). Default false. */
   binarize?: boolean
+  /** Flat-field illumination correction (uneven lighting / curved pages). Default true. */
+  flatten?: boolean
 }
 
 export function enhanceForOcr(src: HTMLCanvasElement, opts?: EnhanceOptions): HTMLCanvasElement {
   const minLongSide = opts?.minLongSide ?? 1280
   const deskew = opts?.deskew ?? true
   const binarize = opts?.binarize ?? false
+  const flatten = opts?.flatten ?? true
   const longSide = Math.max(src.width, src.height)
   const scale = longSide < minLongSide ? Math.min(3, minLongSide / longSide) : 1
 
@@ -73,14 +76,42 @@ export function enhanceForOcr(src: HTMLCanvasElement, opts?: EnhanceOptions): HT
   const img = ctx.getImageData(0, 0, w, h)
   const data = img.data
 
-  // First pass: grayscale + histogram for percentile clipping.
+  // Grayscale.
   const gray = new Uint8ClampedArray(w * h)
-  const hist = new Uint32Array(256)
   for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-    const g = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0
-    gray[p] = g
-    hist[g]++
+    gray[p] = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0
   }
+
+  // Flat-field: divide by a smooth background estimate so shadowed / dim areas
+  // (curved pages, uneven lighting) keep contrast — otherwise whole lines on the
+  // dim side fall below the detector's confidence and get dropped.
+  if (flatten) {
+    const bw = Math.max(1, Math.round(w / 32))
+    const bh = Math.max(1, Math.round(h / 32))
+    const tmp = document.createElement('canvas')
+    tmp.width = bw
+    tmp.height = bh
+    const tctx = tmp.getContext('2d')!
+    tctx.imageSmoothingEnabled = true
+    tctx.drawImage(out, 0, 0, bw, bh) // heavy downscale ≈ blurred illumination
+    const bgData = tctx.getImageData(0, 0, bw, bh).data
+    const bg = new Float32Array(bw * bh)
+    for (let j = 0, q = 0; j < bgData.length; j += 4, q++) {
+      bg[q] = bgData[j] * 0.299 + bgData[j + 1] * 0.587 + bgData[j + 2] * 0.114 || 1
+    }
+    for (let y = 0; y < h; y++) {
+      const by = Math.min(bh - 1, (y * bh) / h) | 0
+      for (let x = 0; x < w; x++) {
+        const bx = Math.min(bw - 1, (x * bw) / w) | 0
+        const v = (gray[y * w + x] * 160) / (bg[by * bw + bx] || 1)
+        gray[y * w + x] = v > 255 ? 255 : v
+      }
+    }
+  }
+
+  // Histogram of (flattened) grayscale for percentile clipping.
+  const hist = new Uint32Array(256)
+  for (let p = 0; p < gray.length; p++) hist[gray[p]]++
 
   // 1st / 99th percentile bounds for a robust contrast stretch.
   const total = w * h

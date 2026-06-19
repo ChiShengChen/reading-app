@@ -21,8 +21,8 @@ Usage:
     python scripts/build-jmdict-sqlite.py --out jmdict.sqlite --common  # smaller, common words only
 
     # then upload to your Hugging Face (public):
-    huggingface-cli login
-    huggingface-cli upload <your-username>/jmdict-sqlite jmdict.sqlite jmdict.sqlite
+    hf auth login
+    hf upload <your-username>/jmdict-sqlite jmdict.sqlite jmdict.sqlite
 """
 import argparse
 import io
@@ -124,8 +124,8 @@ def main() -> int:
     print(f"\nDone: {args.out}  ({n} rows, {size_mb:.1f} MB)")
     print(
         "Upload (public), then paste the URL in 設定→進階→日文字典:\n"
-        "  huggingface-cli login\n"
-        "  huggingface-cli upload <your-username>/jmdict-sqlite "
+        "  hf auth login\n"
+        "  hf upload <your-username>/jmdict-sqlite "
         f"{args.out} jmdict.sqlite\n"
         "  URL = https://huggingface.co/<your-username>/jmdict-sqlite/resolve/main/jmdict.sqlite"
     )

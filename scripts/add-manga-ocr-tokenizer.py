@@ -10,7 +10,7 @@ tokenizer.json from vocab.txt.
 
 Usage:
     pip install transformers huggingface_hub
-    huggingface-cli login          # write token
+    hf auth login          # write token
     python scripts/add-manga-ocr-tokenizer.py --dst <your-username>/manga-ocr-base-ONNX
 """
 import argparse

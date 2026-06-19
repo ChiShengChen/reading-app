@@ -121,8 +121,8 @@ def main() -> int:
             print(f"  {p.relative_to(out)}  ({p.stat().st_size // 1024} KB)")
     print(
         "\nNext: upload to your Hugging Face account, e.g.\n"
-        "  huggingface-cli login\n"
-        f"  huggingface-cli upload <your-username>/manga-ocr-base-ONNX {out} .\n"
+        "  hf auth login\n"
+        f"  hf upload <your-username>/manga-ocr-base-ONNX {out} .\n"
         "Then paste that repo id into the app: 設定 → 進階 → 日文辨識模型。"
     )
     return 0

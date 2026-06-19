@@ -24,3 +24,4 @@ manga-ocr-onnx/
 manga-ocr-extra/
 extra/
 *.onnx
+*.sqlite

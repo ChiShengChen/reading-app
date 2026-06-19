@@ -29,8 +29,8 @@ ls manga-ocr-onnx
 #   config.json tokenizer.json vocab.txt preprocessor_config.json …
 
 # 4) 登入並上傳到你的帳號（把 <your-username> 換成你的）
-huggingface-cli login        # 貼上 write token
-huggingface-cli upload <your-username>/manga-ocr-base-ONNX manga-ocr-onnx .
+hf auth login        # 貼上 write token
+hf upload <your-username>/manga-ocr-base-ONNX manga-ocr-onnx .
 ```
 
 建立 repo 時若被問公開/私有，選 **public**（App 是純前端、用匿名下載；私有 repo 無法匿名抓）。

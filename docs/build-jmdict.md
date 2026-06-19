@@ -24,8 +24,8 @@ python scripts/build-jmdict-sqlite.py --out jmdict.sqlite
 #   完整約 40–70 MB；--common 明顯更小
 
 # 上傳到你的帳號（public）
-huggingface-cli login
-huggingface-cli upload <your-username>/jmdict-sqlite jmdict.sqlite jmdict.sqlite
+hf auth login
+hf upload <your-username>/jmdict-sqlite jmdict.sqlite jmdict.sqlite
 ```
 
 ## 在 App 啟用

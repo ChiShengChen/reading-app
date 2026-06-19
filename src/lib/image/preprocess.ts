@@ -273,6 +273,23 @@ export function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/png'): Pro
   })
 }
 
+/** Rotate a canvas 90° (for fixing sideways photos before OCR). */
+export function rotate90(src: HTMLCanvasElement, clockwise = true): HTMLCanvasElement {
+  const out = document.createElement('canvas')
+  out.width = src.height
+  out.height = src.width
+  const ctx = out.getContext('2d')!
+  if (clockwise) {
+    ctx.translate(out.width, 0)
+    ctx.rotate(Math.PI / 2)
+  } else {
+    ctx.translate(0, out.height)
+    ctx.rotate(-Math.PI / 2)
+  }
+  ctx.drawImage(src, 0, 0)
+  return out
+}
+
 /** Downscaled JPEG thumbnail (for book covers / page lists). */
 export function makeThumbnail(src: HTMLCanvasElement, maxSide = 240): Promise<Blob> {
   const scale = Math.min(1, maxSide / Math.max(src.width, src.height))

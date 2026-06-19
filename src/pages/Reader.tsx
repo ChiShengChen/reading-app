@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../AppContext'
 import CropTool from '../components/CropTool'
-import { blobToBitmap, bitmapToCanvas, cropCanvas, type CropRect } from '../lib/image/preprocess'
+import {
+  blobToBitmap,
+  bitmapToCanvas,
+  cropCanvas,
+  rotate90,
+  type CropRect,
+} from '../lib/image/preprocess'
 import { runOcr } from '../lib/ocr/pipeline'
 import { getDetModelSpec, isModelCached } from '../lib/ocr/modelManager'
 import { isMangaOcrCached } from '../lib/ocr/recognizers'
@@ -155,9 +161,18 @@ export default function Reader() {
       {step === 'crop' && source && (
         <div className="space-y-3">
           <CropTool source={source} onConfirm={onConfirmCrop} />
-          <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-200">
-            ← 換一張
-          </button>
+          <div className="flex items-center gap-3 text-sm">
+            <button
+              onClick={() => setSource(rotate90(source, true))}
+              className="rounded border border-slate-600 px-3 py-1.5 text-slate-300 hover:bg-slate-800"
+            >
+              ↻ 旋轉 90°
+            </button>
+            <button onClick={reset} className="text-slate-400 hover:text-slate-200">
+              ← 換一張
+            </button>
+            <span className="text-xs text-slate-500">文字若是橫躺，先轉正再辨識</span>
+          </div>
         </div>
       )}
 

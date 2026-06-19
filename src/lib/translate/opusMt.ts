@@ -2,15 +2,14 @@
  * Opus-MT translation via Transformers.js (MarianMT) — the cross-platform,
  * fully-local, offline-capable translation path (WebGPU, WASM fallback).
  *
- * IMPORTANT: Opus-MT *-zh models output **Simplified** Chinese. Our target is
- * zh-Hant (Traditional) per Hard Constraints, so callers should treat this
- * output as Simplified (isSimplified=true). Traditional conversion (e.g.
- * OpenCC) is a follow-up; the Chrome Translator API path already yields zh-Hant.
+ * Opus-MT *-zh models output **Simplified** Chinese; callers post-convert to
+ * zh-Hant via OpenCC (see translate/index.ts).
  *
- * NOTE: model ids below are the assumed Xenova ONNX repos and are not yet
- * verified end-to-end. ja→zh in particular may be unavailable directly; if so,
- * override via setOpusModel(), or pivot ja→en→zh (future). On load failure the
- * UI surfaces it; nothing else breaks.
+ * There is no verified direct ja→zh ONNX repo, so Japanese is translated by a
+ * PIVOT chain ja→en→zh using two verified repos:
+ *   Xenova/opus-mt-ja-en  →  Xenova/opus-mt-en-zh
+ * English is the single hop Xenova/opus-mt-en-zh (confirmed working on-device).
+ * Override a chain via setOpusChain(); on load failure the UI surfaces it.
  */
 import { pipeline, type TranslationPipeline } from '@huggingface/transformers'
 import type { ComputeBackend } from '../capabilities'
@@ -24,41 +23,42 @@ type TranslationFactory = (
 ) => Promise<TranslationPipeline>
 const createTranslator = pipeline as unknown as TranslationFactory
 
-const MODELS: Record<OcrLanguage, string> = {
-  en: 'Xenova/opus-mt-en-zh',
-  ja: 'Xenova/opus-mt-ja-zh',
+// Ordered model chains; each hop feeds the next. Final hop outputs Chinese.
+const CHAINS: Record<OcrLanguage, string[]> = {
+  en: ['Xenova/opus-mt-en-zh'],
+  ja: ['Xenova/opus-mt-ja-en', 'Xenova/opus-mt-en-zh'],
 }
 
-export function setOpusModel(lang: OcrLanguage, id: string) {
-  MODELS[lang] = id
-  cache.delete(lang)
+export function setOpusChain(lang: OcrLanguage, modelIds: string[]) {
+  CHAINS[lang] = modelIds
+  cache.clear()
 }
 
-export function getOpusModelId(lang: OcrLanguage): string {
-  return MODELS[lang]
+export function getOpusChain(lang: OcrLanguage): string[] {
+  return CHAINS[lang]
 }
 
 interface Entry {
   pipe: Promise<TranslationPipeline>
   backend: ComputeBackend
 }
-const cache = new Map<OcrLanguage, Entry>()
+const cache = new Map<string, Entry>() // keyed by modelId
 
-export async function loadOpus(
-  lang: OcrLanguage,
+export async function loadOpusModel(
+  modelId: string,
   backend: ComputeBackend,
   onProgress?: TranslateProgressCallback,
 ): Promise<TranslationPipeline> {
-  const existing = cache.get(lang)
+  const existing = cache.get(modelId)
   if (existing && existing.backend === backend) return existing.pipe
 
   const files = new Map<string, { loaded: number; total: number }>()
-  const pipe = createTranslator('translation', MODELS[lang], {
+  const pipe = createTranslator('translation', modelId, {
     device: backend === 'webgpu' ? 'webgpu' : 'wasm',
     dtype: backend === 'webgpu' ? 'fp32' : 'q8',
     progress_callback: onProgress
       ? (p: unknown) => {
-          const e = p as { status?: string; file?: string; loaded?: number; total?: number }
+          const e = p as { file?: string; loaded?: number; total?: number }
           if (e.file && typeof e.total === 'number' && e.total > 0) {
             files.set(e.file, { loaded: e.loaded ?? 0, total: e.total })
           }
@@ -77,8 +77,19 @@ export async function loadOpus(
         }
       : undefined,
   })
-  cache.set(lang, { pipe, backend })
+  cache.set(modelId, { pipe, backend })
   return pipe
+}
+
+async function runHop(pipe: TranslationPipeline, inputs: string[]): Promise<string[]> {
+  const out: string[] = []
+  for (const text of inputs) {
+    const res = (await pipe(text)) as
+      | Array<{ translation_text: string }>
+      | { translation_text: string }
+    out.push(((Array.isArray(res) ? res[0]?.translation_text : res.translation_text) ?? '').trim())
+  }
+  return out
 }
 
 export async function translateOpus(
@@ -87,23 +98,24 @@ export async function translateOpus(
   backend: ComputeBackend,
   onProgress?: TranslateProgressCallback,
 ): Promise<string[]> {
-  const pipe = await loadOpus(lang, backend, onProgress)
-  const out: string[] = []
-  // Translate sequentially so progress is meaningful and memory stays bounded.
-  for (let i = 0; i < sentences.length; i++) {
-    onProgress?.({
-      phase: 'translating',
-      engine: 'opus-mt',
-      ratio: i / sentences.length,
-      message: `翻譯 ${i + 1} / ${sentences.length}`,
-    })
-    const res = (await pipe(sentences[i])) as
-      | Array<{ translation_text: string }>
-      | { translation_text: string }
-    const text = Array.isArray(res) ? res[0]?.translation_text : res.translation_text
-    out.push((text ?? '').trim())
+  const chain = CHAINS[lang]
+  let current = sentences
+  for (let hop = 0; hop < chain.length; hop++) {
+    const pipe = await loadOpusModel(chain[hop], backend, onProgress)
+    const label = chain.length > 1 ? `（第 ${hop + 1}/${chain.length} 段）` : ''
+    const next: string[] = []
+    for (let i = 0; i < current.length; i++) {
+      onProgress?.({
+        phase: 'translating',
+        engine: 'opus-mt',
+        ratio: i / current.length,
+        message: `翻譯 ${i + 1} / ${current.length}${label}`,
+      })
+      next.push(...(await runHop(pipe, [current[i]])))
+    }
+    current = next
   }
-  return out
+  return current
 }
 
 export function disposeOpus() {

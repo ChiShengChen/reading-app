@@ -18,15 +18,14 @@ export interface ModelSpec {
 /**
  * Default PaddleOCR text-DETECTION model (DBNet), exported to ONNX.
  *
- * Source: RapidOCR's ONNX model zoo (PP-OCRv4 detection, ~4.7 MB). The det
- * model is small; the heavy weights come later from manga-ocr (Phase 2).
- *
- * NOTE: This URL is overridable via setDetModelUrl(). If it 404s or CORS-fails,
- * the pipeline degrades to full-page Tesseract (see pipeline.ts) instead of
+ * Source: monkt/paddleocr-onnx (PP-OCRv5 mobile detection). Verified to be a
+ * real ONNX file with permissive CORS. Overridable via setDetModelUrl(); the
+ * v3 det (detection/v3/det.onnx) is a smaller alternative. If it 404s/CORS-
+ * fails, the pipeline degrades to full-page Tesseract (English) rather than
  * crashing, and the UI surfaces the reason.
  */
 export const DEFAULT_DET_MODEL_URL =
-  'https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer/ch_PP-OCRv4_det_infer.onnx'
+  'https://huggingface.co/monkt/paddleocr-onnx/resolve/main/detection/v5/det.onnx'
 
 let detModelUrl = DEFAULT_DET_MODEL_URL
 
@@ -39,7 +38,7 @@ export function getDetModelSpec(): ModelSpec {
     id: 'paddle-det-v4',
     url: detModelUrl,
     approxBytes: 4.7 * 1024 * 1024,
-    label: 'PaddleOCR 偵測模型 (PP-OCRv4 det)',
+    label: 'PaddleOCR 偵測模型 (PP-OCRv5 det)',
   }
 }
 

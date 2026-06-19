@@ -26,17 +26,14 @@ function copyList(srcDir, destDir, files) {
   return copied
 }
 
-// 1) onnxruntime-web
-const ort = copyList(
-  join(nm, 'onnxruntime-web', 'dist'),
-  join(root, 'public', 'ort'),
-  [
-    'ort-wasm-simd-threaded.jsep.wasm',
-    'ort-wasm-simd-threaded.jsep.mjs',
-    'ort-wasm-simd-threaded.wasm',
-    'ort-wasm-simd-threaded.mjs',
-  ],
-)
+// 1) onnxruntime-web — copy ALL runtime variants (jsep/asyncify/jspi/plain).
+// The WebGPU build may request any of them depending on the device; a missing
+// variant 404s and breaks initWasm() ("no available backend found").
+const ortDist = join(nm, 'onnxruntime-web', 'dist')
+const ortFiles = existsSync(ortDist)
+  ? readdirSync(ortDist).filter((f) => /^ort-wasm-simd-threaded.*\.(wasm|mjs)$/.test(f))
+  : []
+const ort = copyList(ortDist, join(root, 'public', 'ort'), ortFiles)
 console.log(`[sync-assets] ort: ${ort} files`)
 
 // 2) kuromoji dictionary (all *.dat.gz)

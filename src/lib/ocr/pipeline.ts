@@ -12,7 +12,7 @@
  */
 import type { ComputeBackend } from '../capabilities'
 import { errorMessage } from '../errorMessage'
-import { enhanceForOcr, cropCanvas, deskewCanvas } from '../image/preprocess'
+import { enhanceForOcr, cropCanvas, deskewCanvas, rotate90 } from '../image/preprocess'
 import { splitSentences } from '../text/sentences'
 import { detect } from './detector'
 import { recognizeRegion, recognizeEng, preloadRecognizer } from './recognizers'
@@ -29,7 +29,7 @@ export async function runOcr(
   onProgress?: ProgressCallback,
 ): Promise<PipelineResult> {
   onProgress?.({ stage: 'preprocess', message: '影像強化中…' })
-  const enhanced = enhanceForOcr(cropped, { deskew: false })
+  let enhanced = enhanceForOcr(cropped, { deskew: false })
 
   let detected: { box: Box; detScore: number }[] = []
   let detectionFailed = false
@@ -63,6 +63,16 @@ export async function runOcr(
       console.warn('[pipeline] wasm detection retry failed:', err2)
       detectError = errorMessage(err2)
     }
+  }
+
+  // Auto-orientation (English): if the detected line boxes are mostly "portrait"
+  // (taller than wide) the page was shot sideways; find the rotation whose
+  // sample line recognizes most confidently and use it.
+  if (lang === 'en' && !detectionFailed && detected.length >= 2) {
+    onProgress?.({ stage: 'detecting', message: '判斷頁面方向…' })
+    const oriented = await autoOrientEn(enhanced, detected, backend)
+    enhanced = oriented.enhanced
+    detected = oriented.detected
   }
 
   // For Japanese, manga-ocr MUST run on detected regions only. If detection is
@@ -145,4 +155,52 @@ export async function runOcr(
     detectError,
     processed: enhanced,
   }
+}
+
+interface Oriented {
+  enhanced: HTMLCanvasElement
+  detected: { box: Box; detScore: number }[]
+}
+
+/** Recognize the widest detected line as a confidence sample for orientation. */
+async function sampleConfidence(
+  img: HTMLCanvasElement,
+  boxes: { box: Box; detScore: number }[],
+): Promise<number> {
+  if (boxes.length === 0) return 0
+  const widest = boxes.reduce((a, b) => (b.box.w > a.box.w ? b : a))
+  const out = await recognizeEng(deskewCanvas(cropCanvas(img, widest.box)))
+  return out.score
+}
+
+/**
+ * Pick page orientation for English. Upright pages (wide line boxes, confident
+ * sample) are kept as-is cheaply; only when boxes look "portrait" do we test
+ * ±90° rotations and keep whichever sample recognizes best.
+ */
+async function autoOrientEn(
+  enhanced: HTMLCanvasElement,
+  detected: { box: Box; detScore: number }[],
+  backend: ComputeBackend,
+): Promise<Oriented> {
+  const portraitFrac =
+    detected.filter((d) => d.box.h > d.box.w * 1.3).length / detected.length
+  const baseScore = await sampleConfidence(enhanced, detected)
+
+  // Looks upright and reads well — keep it (1 sample call, no rotation).
+  if (portraitFrac < 0.5 && baseScore >= 0.55) return { enhanced, detected }
+
+  let best: Oriented & { score: number } = { enhanced, detected, score: baseScore }
+  for (const clockwise of [true, false]) {
+    try {
+      const rot = rotate90(enhanced, clockwise)
+      const boxes = await detect(rot, backend)
+      if (boxes.length === 0) continue
+      const score = await sampleConfidence(rot, boxes)
+      if (score > best.score) best = { enhanced: rot, detected: boxes, score }
+    } catch (err) {
+      console.warn('[pipeline] orientation probe failed:', err)
+    }
+  }
+  return { enhanced: best.enhanced, detected: best.detected }
 }

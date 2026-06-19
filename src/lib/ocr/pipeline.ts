@@ -94,7 +94,7 @@ export async function runOcr(
       engine: 'fallback-fullpage',
       message: '偵測未啟用，改為整頁辨識（僅英文）…',
     })
-    const out = await recognizeEng(enhanced)
+    const out = await recognizeEng(enhanced, false) // whole-page layout analysis
     if (out.text) {
       regions.push({
         box: { x: 0, y: 0, w: enhanced.width, h: enhanced.height },

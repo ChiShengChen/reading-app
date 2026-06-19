@@ -8,7 +8,7 @@
  * from a CDN on first use (configurable via LANG_PATH; cached by the service
  * worker afterwards so it works offline thereafter).
  */
-import { createWorker, type Worker } from 'tesseract.js'
+import { createWorker, PSM, type Worker } from 'tesseract.js'
 import type { RecognitionOutput, LoadProgressCallback } from './types'
 
 // Self-hosted worker + core (honour Vite base path, e.g. '/reading-app/').
@@ -40,8 +40,24 @@ export async function loadTesseract(onProgress?: LoadProgressCallback): Promise<
   return workerPromise
 }
 
-export async function recognizeEng(canvas: HTMLCanvasElement): Promise<RecognitionOutput> {
+let currentPsm: PSM | null = null
+
+/**
+ * Recognize English. `singleLine` picks the page-segmentation mode:
+ *   - true  (PSM 7, SINGLE_LINE): for detected line crops — far more accurate
+ *     than full-page layout analysis on a one-line image.
+ *   - false (PSM 3, AUTO): for the whole-page fallback.
+ */
+export async function recognizeEng(
+  canvas: HTMLCanvasElement,
+  singleLine = true,
+): Promise<RecognitionOutput> {
   const worker = await loadTesseract()
+  const psm = singleLine ? PSM.SINGLE_LINE : PSM.AUTO
+  if (psm !== currentPsm) {
+    await worker.setParameters({ tessedit_pageseg_mode: psm })
+    currentPsm = psm
+  }
   const { data } = await worker.recognize(canvas)
   return {
     text: data.text.trim(),

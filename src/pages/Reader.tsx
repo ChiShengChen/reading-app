@@ -38,6 +38,7 @@ export default function Reader() {
   const [detCached, setDetCached] = useState(false)
   const [jaCached, setJaCached] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     void isModelCached(getDetModelSpec()).then(setDetCached)
@@ -85,6 +86,7 @@ export default function Reader() {
     setError(null)
     setStep('pick')
     if (fileRef.current) fileRef.current.value = ''
+    if (cameraRef.current) cameraRef.current.value = ''
   }
 
   return (
@@ -143,19 +145,33 @@ export default function Reader() {
       )}
 
       {step === 'pick' && (
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 p-12 text-center hover:border-sky-500">
-          <span className="text-3xl">📷</span>
-          <span className="font-medium text-slate-200">拍照或選擇書頁圖片</span>
-          <span className="text-xs text-slate-500">Android 可直接開相機；桌機可選檔案</span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={onPick}
-          />
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 p-8 text-center hover:border-sky-500">
+            <span className="text-3xl">📷</span>
+            <span className="font-medium text-slate-200">拍照</span>
+            <span className="text-xs text-slate-500">直接開相機拍書頁</span>
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={onPick}
+            />
+          </label>
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 p-8 text-center hover:border-sky-500">
+            <span className="text-3xl">🖼️</span>
+            <span className="font-medium text-slate-200">從相簿／檔案</span>
+            <span className="text-xs text-slate-500">選擇已存在的照片</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onPick}
+            />
+          </label>
+        </div>
       )}
 
       {step === 'crop' && source && (

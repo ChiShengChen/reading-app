@@ -62,6 +62,10 @@ export interface Note {
   userNote?: string
   tags: string[]
   createdAt: number
+  // Spaced-repetition (SM-2-lite) state; undefined = never reviewed (due now).
+  srsDue?: number
+  srsInterval?: number // days
+  srsEase?: number
 }
 
 export interface Settings {

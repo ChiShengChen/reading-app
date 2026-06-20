@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   listNotes,
   deleteNote,
+  updateNote,
   listBookmarks,
   deleteBookmark,
   type Note,
@@ -10,6 +11,28 @@ import {
 } from '../db/db'
 
 type Filter = 'all' | 'word' | 'sentence'
+
+const DAY = 24 * 60 * 60 * 1000
+type Grade = 'again' | 'good' | 'easy'
+
+/** SM-2-lite scheduler. */
+function schedule(n: Note, grade: Grade): Partial<Note> {
+  const ease = n.srsEase ?? 2.5
+  const interval = n.srsInterval ?? 0
+  if (grade === 'again') {
+    return { srsDue: Date.now() + 10 * 60 * 1000, srsInterval: 0, srsEase: Math.max(1.3, ease - 0.2) }
+  }
+  const base = interval > 0 ? interval * ease : 1
+  const nextInterval = grade === 'easy' ? base * 1.5 : base
+  const nextEase = grade === 'easy' ? ease + 0.1 : ease
+  return {
+    srsDue: Date.now() + nextInterval * DAY,
+    srsInterval: nextInterval,
+    srsEase: nextEase,
+  }
+}
+
+const isDue = (n: Note) => !n.srsDue || n.srsDue <= Date.now()
 
 function download(filename: string, text: string, mime: string) {
   const url = URL.createObjectURL(new Blob([text], { type: mime }))
@@ -50,6 +73,9 @@ export default function Notebook() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [filter, setFilter] = useState<Filter>('all')
   const [loading, setLoading] = useState(true)
+  const [reviewing, setReviewing] = useState(false)
+
+  const due = useMemo(() => notes.filter(isDue), [notes])
 
   async function refresh() {
     const [n, b] = await Promise.all([listNotes(), listBookmarks()])
@@ -78,13 +104,35 @@ export default function Notebook() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-5">
-      <div>
-        <h2 className="text-xl font-semibold">筆記本</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          在「閱讀」分頁點選日文詞語或句子即可存入這裡（Phase 4）。
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-semibold">筆記本</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            在「閱讀」分頁點選詞語或句子即可存入這裡。
+          </p>
+        </div>
+        {!reviewing && due.length > 0 && (
+          <button
+            onClick={() => setReviewing(true)}
+            className="shrink-0 rounded bg-violet-500 px-3 py-2 text-sm font-medium text-slate-900 hover:bg-violet-400"
+          >
+            複習（{due.length}）
+          </button>
+        )}
       </div>
 
+      {reviewing && (
+        <ReviewSession
+          notes={due}
+          onDone={() => {
+            setReviewing(false)
+            void refresh()
+          }}
+        />
+      )}
+
+      {!reviewing && (
+        <>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {(['all', 'word', 'sentence'] as const).map((f) => (
           <button
@@ -189,6 +237,90 @@ export default function Notebook() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function ReviewSession({ notes, onDone }: { notes: Note[]; onDone: () => void }) {
+  const [i, setI] = useState(0)
+  const [revealed, setRevealed] = useState(false)
+  const card = notes[i]
+
+  if (!card) {
+    return (
+      <div className="rounded-lg border border-slate-700 p-6 text-center">
+        <p className="text-slate-200">複習完成 🎉</p>
+        <button
+          onClick={onDone}
+          className="mt-3 rounded bg-sky-500 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-sky-400"
+        >
+          回筆記本
+        </button>
+      </div>
+    )
+  }
+
+  async function grade(g: Grade) {
+    await updateNote(card.id, schedule(card, g))
+    setRevealed(false)
+    setI((n) => n + 1)
+  }
+
+  return (
+    <div className="space-y-4 rounded-lg border border-violet-800 bg-slate-900/60 p-6">
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>
+          複習 {i + 1} / {notes.length}
+        </span>
+        <button onClick={onDone} className="hover:text-slate-300">
+          結束
+        </button>
+      </div>
+
+      <div className="py-4 text-center">
+        <div className="text-2xl font-semibold text-slate-100">{card.term}</div>
+        {revealed && (
+          <div className="mt-3 space-y-1 text-left">
+            {card.reading && <p className="text-sm text-slate-400">{card.reading}</p>}
+            {card.definition && <p className="text-sm text-slate-200">{card.definition}</p>}
+            {card.contextSentence && card.contextSentence !== card.term && (
+              <p className="text-xs text-slate-500">情境：{card.contextSentence}</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!revealed ? (
+        <button
+          onClick={() => setRevealed(true)}
+          className="w-full rounded bg-slate-700 py-2 text-sm font-medium text-slate-100 hover:bg-slate-600"
+        >
+          顯示答案
+        </button>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => grade('again')}
+            className="rounded bg-rose-500/80 py-2 text-sm font-medium text-slate-900 hover:bg-rose-400"
+          >
+            忘記
+          </button>
+          <button
+            onClick={() => grade('good')}
+            className="rounded bg-sky-500 py-2 text-sm font-medium text-slate-900 hover:bg-sky-400"
+          >
+            普通
+          </button>
+          <button
+            onClick={() => grade('easy')}
+            className="rounded bg-emerald-500 py-2 text-sm font-medium text-slate-900 hover:bg-emerald-400"
+          >
+            簡單
+          </button>
         </div>
       )}
     </div>

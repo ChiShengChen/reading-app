@@ -87,6 +87,7 @@ export default function Settings() {
             WiFi 再下載。
           </div>
         )}
+        <BatchDownload backend={backend} />
         <div className="space-y-2">
           {MODEL_ENTRIES.map((m) => (
             <ModelCard
@@ -181,6 +182,51 @@ function AdvancedSection() {
         set={setClaudeModel}
       />
     </section>
+  )
+}
+
+/** One-click: download everything needed for English or Japanese, in sequence. */
+function BatchDownload({ backend }: { backend: 'webgpu' | 'wasm' }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+
+  async function run(label: string, scopes: string[]) {
+    setBusy(label)
+    try {
+      const entries = MODEL_ENTRIES.filter((m) => scopes.includes(m.scope))
+      for (const m of entries) {
+        if (await m.isCached()) continue
+        await m.download(backend, (_r, message) => setMsg(`${m.label}：${message}`))
+      }
+      setMsg('完成 ✓')
+    } catch (err) {
+      setMsg(`失敗：${(err as Error).message}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded border border-slate-700 p-3">
+      <p className="text-xs text-slate-400">一鍵下載（離線前先在 WiFi 備妥）</p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => run('en', ['通用', '英文'])}
+          disabled={busy !== null}
+          className="rounded bg-sky-500 px-3 py-1.5 text-xs font-medium text-slate-900 enabled:hover:bg-sky-400 disabled:opacity-50"
+        >
+          {busy === 'en' ? '下載中…' : '下載英文所需'}
+        </button>
+        <button
+          onClick={() => run('ja', ['通用', '日文'])}
+          disabled={busy !== null}
+          className="rounded bg-sky-500 px-3 py-1.5 text-xs font-medium text-slate-900 enabled:hover:bg-sky-400 disabled:opacity-50"
+        >
+          {busy === 'ja' ? '下載中…' : '下載日文所需'}
+        </button>
+      </div>
+      {msg && <p className="text-xs text-slate-500">{msg}</p>}
+    </div>
   )
 }
 

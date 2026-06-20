@@ -28,10 +28,18 @@ export default function BookView() {
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-4 flex items-center gap-2 text-sm">
+      <div className="mb-4 flex items-center gap-3 text-sm">
         <Link to="/" className="text-slate-400 hover:text-slate-200">
           ← 書庫
         </Link>
+        {pages && pages.length > 0 && (
+          <Link
+            to={`/book/${id}/read`}
+            className="ml-auto rounded bg-sky-500 px-3 py-1.5 font-medium text-slate-900 hover:bg-sky-400"
+          >
+            連續閱讀
+          </Link>
+        )}
       </div>
 
       <h2 className="mb-1 text-xl font-semibold">{book?.title ?? '書本'}</h2>

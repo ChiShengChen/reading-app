@@ -19,7 +19,7 @@ import type {
   TranslateProgress,
   TranslateResult,
 } from '../lib/translate'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import JpLookup from '../components/JpLookup'
 import EnLookup from '../components/EnLookup'
 import { cloudOcrTranslate, hasClaudeKey } from '../lib/cloud/claudeVlm'
@@ -27,9 +27,10 @@ import { addNote, createBook, addPage, listBooks, type Book } from '../db/db'
 import { canvasToBlob, makeThumbnail } from '../lib/image/preprocess'
 import { errorMessage } from '../lib/errorMessage'
 
-type Step = 'pick' | 'crop' | 'running' | 'result'
+type Step = 'pick' | 'crop' | 'running' | 'result' | 'batch'
 
 export default function Reader() {
+  const navigate = useNavigate()
   const { capabilities, backend } = useApp()
   const [step, setStep] = useState<Step>('pick')
   const [lang, setLang] = useState<OcrLanguage>('en')
@@ -42,6 +43,7 @@ export default function Reader() {
   const [jaCached, setJaCached] = useState(false)
   // Cloud (Claude) engine is available only when an API key is configured.
   const [engine, setEngine] = useState<'local' | 'cloud'>(hasClaudeKey() ? 'cloud' : 'local')
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
 
@@ -55,16 +57,71 @@ export default function Reader() {
     lang === 'ja' && !jaCached && capabilities?.connection.goodForLargeDownload === false
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
     setError(null)
     setResult(null)
+    // Multiple images → batch import (no per-page crop); single → crop flow.
+    if (files.length > 1) {
+      await runBatch(Array.from(files))
+      return
+    }
     try {
-      const bmp = await blobToBitmap(file)
+      const bmp = await blobToBitmap(files[0])
       setSource(bitmapToCanvas(bmp))
       setStep('crop')
     } catch (err) {
       setError(`無法讀取影像：${errorMessage(err)}`)
+    }
+  }
+
+  // Batch: OCR every image (whole page) and save each as a page in a new book.
+  async function runBatch(files: File[]) {
+    const title = (window.prompt('批次匯入：新書名稱', '') || '未命名書籍').trim() || '未命名書籍'
+    setStep('batch')
+    setBatch({ done: 0, total: files.length })
+    setError(null)
+    try {
+      const bookId = await createBook(title, lang)
+      for (let i = 0; i < files.length; i++) {
+        setBatch({ done: i, total: files.length })
+        const canvas = bitmapToCanvas(await blobToBitmap(files[i]))
+        if (engine === 'cloud') {
+          const cloud = await cloudOcrTranslate(canvas, lang)
+          await addPage({
+            bookId,
+            imageBlob: await canvasToBlob(canvas, 'image/jpeg'),
+            ocrRegions: cloud.pairs.map((p) => ({
+              box: { x: 0, y: 0, w: 0, h: 0 },
+              text: p.source,
+              confidence: 1,
+            })),
+            fullText: cloud.fullText,
+            translation: cloud.pairs.map((p) => p.target).join('\n'),
+            translationPairs: cloud.pairs,
+          })
+        } else {
+          const res = await runOcr(canvas, lang, backend)
+          await addPage({
+            bookId,
+            imageBlob: await canvasToBlob(res.processed, 'image/jpeg'),
+            ocrRegions: res.regions.map((r) => ({
+              box: r.box,
+              text: r.text,
+              confidence: r.recScore,
+            })),
+            fullText: res.fullText,
+          })
+        }
+      }
+      setBatch(null)
+      navigate(`/book/${bookId}`)
+    } catch (err) {
+      setError(`批次處理失敗：${errorMessage(err)}`)
+      setBatch(null)
+      setStep('pick')
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
     }
   }
 
@@ -217,15 +274,34 @@ export default function Reader() {
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 p-8 text-center hover:border-sky-500">
             <span className="text-3xl">🖼️</span>
             <span className="font-medium text-slate-200">從相簿／檔案</span>
-            <span className="text-xs text-slate-500">選擇已存在的照片</span>
+            <span className="text-xs text-slate-500">單張：可裁切；多張：批次匯入成一本書</span>
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
+              multiple
               className="hidden"
               onChange={onPick}
             />
           </label>
+        </div>
+      )}
+
+      {step === 'batch' && batch && (
+        <div className="space-y-3 rounded-lg border border-slate-700 p-6">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-slate-200">批次匯入中…</span>
+            <span className="text-slate-400">
+              {batch.done} / {batch.total} 頁
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded bg-slate-800">
+            <div
+              className="h-full bg-sky-500 transition-all"
+              style={{ width: `${Math.round((batch.done / batch.total) * 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-slate-500">每頁辨識後存入書庫；完成後自動開啟該書。</p>
         </div>
       )}
 
@@ -310,6 +386,14 @@ function ResultView({
   const [transProgress, setTransProgress] = useState<TranslateProgress | null>(null)
   const [trans, setTrans] = useState<TranslateResult | null>(presetTrans ?? null)
   const [transError, setTransError] = useState<string | null>(null)
+  // Editable text (one sentence per line). null = not edited; use OCR result.
+  const [edited, setEdited] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+
+  // Effective sentences/fullText: edited overrides the raw OCR output.
+  const sentences =
+    edited !== null ? edited.split('\n').map((s) => s.trim()).filter(Boolean) : result.sentences
+  const fullText = edited !== null ? sentences.join('\n') : result.fullText
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -333,7 +417,7 @@ function ResultView({
   }, [result])
 
   async function onTranslate() {
-    if (result.sentences.length === 0) return
+    if (sentences.length === 0) return
     setTranslating(true)
     setTransError(null)
     setTrans(null)
@@ -342,13 +426,7 @@ function ResultView({
     // the tab on phones.
     await Promise.allSettled([disposeRecognizers(), disposeDetector()])
     try {
-      const r = await translateSentences(
-        result.sentences,
-        result.lang,
-        enginePref,
-        backend,
-        setTransProgress,
-      )
+      const r = await translateSentences(sentences, result.lang, enginePref, backend, setTransProgress)
       setTrans(r)
     } catch (err) {
       setTransError(errorMessage(err))
@@ -375,28 +453,51 @@ function ResultView({
           <canvas ref={overlayRef} className="w-full rounded border border-slate-700" />
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium text-slate-300">
-            取出文字 · {result.lang === 'ja' ? '日文' : '英文'} · 共 {result.sentences.length} 句
-          </h3>
-          <div className="max-h-[420px] space-y-2 overflow-auto">
-            {result.regions.length === 0 && (
-              <p className="text-sm text-slate-500">沒有取得任何文字。</p>
-            )}
-            {result.regions.map((r, i) => (
-              <div key={i} className="rounded border border-slate-700 bg-slate-900/60 p-2">
-                <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
-                  <span className="rounded bg-slate-700 px-1.5 text-slate-200">{i + 1}</span>
-                  {hasBoxes && (
-                    <>
-                      <span>偵測 {(r.detScore * 100).toFixed(0)}%</span>
-                      <span>辨識 {(r.recScore * 100).toFixed(0)}%</span>
-                    </>
-                  )}
-                </div>
-                <p className="whitespace-pre-wrap text-sm text-slate-100">{r.text}</p>
-              </div>
-            ))}
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-slate-300">
+              取出文字 · {result.lang === 'ja' ? '日文' : '英文'} · 共 {sentences.length} 句
+              {edited !== null && <span className="ml-1 text-xs text-amber-300">（已編輯）</span>}
+            </h3>
+            <button
+              onClick={() => {
+                if (!editing) setEdited(edited ?? sentences.join('\n'))
+                setEditing((v) => !v)
+              }}
+              className="ml-auto rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              {editing ? '完成' : '編輯文字'}
+            </button>
           </div>
+          {editing ? (
+            <textarea
+              value={edited ?? ''}
+              onChange={(e) => setEdited(e.target.value)}
+              spellCheck={false}
+              className="h-[420px] w-full rounded border border-slate-700 bg-slate-900/60 p-2 text-sm text-slate-100"
+              placeholder="一行一句，可修正辨識錯誤"
+            />
+          ) : (
+            <div className="max-h-[420px] space-y-2 overflow-auto">
+              {sentences.length === 0 && <p className="text-sm text-slate-500">沒有取得任何文字。</p>}
+              {(edited !== null
+                ? sentences.map((text) => ({ text, detScore: 1, recScore: 1 }))
+                : result.regions
+              ).map((r, i) => (
+                <div key={i} className="rounded border border-slate-700 bg-slate-900/60 p-2">
+                  <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
+                    <span className="rounded bg-slate-700 px-1.5 text-slate-200">{i + 1}</span>
+                    {hasBoxes && edited === null && (
+                      <>
+                        <span>偵測 {(r.detScore * 100).toFixed(0)}%</span>
+                        <span>辨識 {(r.recScore * 100).toFixed(0)}%</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm text-slate-100">{r.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -488,7 +589,9 @@ function ResultView({
       </div>
 
       {/* Save to library (persistence) */}
-      {result.regions.length > 0 && <SaveToLibrary result={result} trans={trans} />}
+      {result.regions.length > 0 && (
+        <SaveToLibrary result={result} fullText={fullText} trans={trans} />
+      )}
 
       <div className="flex gap-2">
         <button
@@ -546,7 +649,15 @@ function SentencePair({
 }
 
 /** Persist the recognized (and optionally translated) page into a book. */
-function SaveToLibrary({ result, trans }: { result: PipelineResult; trans: TranslateResult | null }) {
+function SaveToLibrary({
+  result,
+  fullText,
+  trans,
+}: {
+  result: PipelineResult
+  fullText: string
+  trans: TranslateResult | null
+}) {
   const [books, setBooks] = useState<Book[]>([])
   const [target, setTarget] = useState<string>('new') // 'new' | book id
   const [title, setTitle] = useState('')
@@ -582,7 +693,7 @@ function SaveToLibrary({ result, trans }: { result: PipelineResult; trans: Trans
         bookId,
         imageBlob,
         ocrRegions,
-        fullText: result.fullText,
+        fullText,
         translation: trans ? trans.pairs.map((p) => p.target).join('\n') : undefined,
         translationPairs: trans ? trans.pairs : undefined,
       })

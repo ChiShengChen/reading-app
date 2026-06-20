@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import Library from './pages/Library'
 import BookView from './pages/BookView'
 import PageView from './pages/PageView'
+import ContinuousReader from './pages/ContinuousReader'
 import Reader from './pages/Reader'
 import Notebook from './pages/Notebook'
 import Settings from './pages/Settings'
@@ -15,6 +16,7 @@ const router = createBrowserRouter(
       children: [
         { index: true, element: <Library /> },
         { path: 'book/:bookId', element: <BookView /> },
+        { path: 'book/:bookId/read', element: <ContinuousReader /> },
         { path: 'book/:bookId/page/:pageIndex', element: <PageView /> },
         { path: 'reader', element: <Reader /> },
         { path: 'notebook', element: <Notebook /> },

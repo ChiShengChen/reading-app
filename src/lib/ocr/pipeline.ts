@@ -27,11 +27,14 @@ import type { Box, PipelineResult, ProgressCallback, RecognizedRegion } from './
  */
 const MIN_REC_SCORE_JA = 0.4
 
+export type JpOrientation = 'auto' | 'horizontal' | 'vertical'
+
 export async function runOcr(
   cropped: HTMLCanvasElement,
   lang: OcrLanguage,
   backend: ComputeBackend,
   onProgress?: ProgressCallback,
+  jpOrientation: JpOrientation = 'auto',
 ): Promise<PipelineResult> {
   onProgress?.({ stage: 'preprocess', message: '影像強化中…' })
   let enhanced = enhanceForOcr(cropped, { deskew: false })
@@ -78,6 +81,25 @@ export async function runOcr(
     const oriented = await autoOrientEn(enhanced, detected, backend)
     enhanced = oriented.enhanced
     detected = oriented.detected
+  }
+
+  // Japanese vertical (直書) handling: detect tall-narrow column boxes, reorder
+  // right-to-left + top-to-bottom (vertical reading order), and skip the
+  // horizontal de-skew (manga-ocr reads vertical column crops natively).
+  let vertical = false
+  if (lang === 'ja' && !detectionFailed && detected.length >= 1) {
+    if (jpOrientation === 'vertical') vertical = true
+    else if (jpOrientation === 'auto') {
+      const portrait = detected.filter((d) => d.box.h > d.box.w * 1.3).length / detected.length
+      vertical = portrait > 0.5
+    }
+    if (vertical) {
+      detected = [...detected].sort((a, b) => {
+        const dx = b.box.x - a.box.x // rightmost column first
+        if (Math.abs(dx) > Math.min(a.box.w, b.box.w) * 0.6) return dx
+        return a.box.y - b.box.y // within a column, top first
+      })
+    }
   }
 
   // For Japanese, manga-ocr MUST run on detected regions only. If detection is
@@ -133,8 +155,11 @@ export async function runOcr(
         ratio: i / total,
         message: `辨識區域 ${i + 1} / ${total}`,
       })
-      // Crop the line, then micro-deskew it level before recognition.
-      const regionCanvas = deskewCanvas(cropCanvas(enhanced, region.box))
+      // Crop the line, then micro-deskew it level before recognition. Vertical
+      // columns are not horizontal text lines, so skip the horizontal de-skew
+      // (manga-ocr reads vertical column crops natively).
+      const cropped = cropCanvas(enhanced, region.box)
+      const regionCanvas = vertical ? cropped : deskewCanvas(cropped)
       const out = await recognizeRegion(regionCanvas, lang, region.detScore, backend)
       // Drop empty always; drop low-confidence only for hallucination-prone JP.
       if (!out.text) continue

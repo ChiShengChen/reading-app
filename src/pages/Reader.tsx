@@ -8,7 +8,7 @@ import {
   rotate90,
   type CropRect,
 } from '../lib/image/preprocess'
-import { runOcr } from '../lib/ocr/pipeline'
+import { runOcr, type JpOrientation } from '../lib/ocr/pipeline'
 import { getDetModelSpec, isModelCached } from '../lib/ocr/modelManager'
 import { isMangaOcrCached, disposeRecognizers } from '../lib/ocr/recognizers'
 import { disposeDetector } from '../lib/ocr/detector'
@@ -34,6 +34,8 @@ export default function Reader() {
   const { capabilities, backend } = useApp()
   const [step, setStep] = useState<Step>('pick')
   const [lang, setLang] = useState<OcrLanguage>('en')
+  // Japanese layout: auto-detect, force horizontal (橫書), or force vertical (直書).
+  const [jpOrient, setJpOrient] = useState<JpOrientation>('auto')
   const [source, setSource] = useState<HTMLCanvasElement | null>(null)
   const [progress, setProgress] = useState<PipelineProgress | null>(null)
   const [result, setResult] = useState<PipelineResult | null>(null)
@@ -101,7 +103,7 @@ export default function Reader() {
             translationPairs: cloud.pairs,
           })
         } else {
-          const res = await runOcr(canvas, lang, backend)
+          const res = await runOcr(canvas, lang, backend, undefined, jpOrient)
           await addPage({
             bookId,
             imageBlob: await canvasToBlob(res.processed, 'image/jpeg'),
@@ -159,7 +161,7 @@ export default function Reader() {
         setStep('result')
         return
       }
-      const res = await runOcr(cropped, lang, backend, setProgress)
+      const res = await runOcr(cropped, lang, backend, setProgress, jpOrient)
       setResult(res)
       setStep('result')
     } catch (err) {
@@ -240,6 +242,39 @@ export default function Reader() {
               {jaCached ? 'manga-ocr 已快取' : 'manga-ocr 首次 ~440MB'}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Japanese layout direction — vertical (直書) reorders columns right→left. */}
+      {(step === 'pick' || step === 'crop') && lang === 'ja' && engine === 'local' && (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-slate-400">排版方向</span>
+          <div className="inline-flex overflow-hidden rounded border border-slate-600">
+            {(
+              [
+                ['auto', '自動'],
+                ['horizontal', '橫書'],
+                ['vertical', '直書'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setJpOrient(v)}
+                className={`px-3 py-1.5 ${
+                  jpOrient === v ? 'bg-sky-500 text-slate-900' : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-slate-500">
+            {jpOrient === 'vertical'
+              ? '欄由右至左、字由上至下'
+              : jpOrient === 'auto'
+                ? '依框形自動判斷直/橫'
+                : '行由上至下、字由左至右'}
+          </span>
         </div>
       )}
 

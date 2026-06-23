@@ -13,7 +13,7 @@ import { getDetModelSpec, isModelCached } from '../lib/ocr/modelManager'
 import { isMangaOcrCached, disposeRecognizers } from '../lib/ocr/recognizers'
 import { disposeDetector } from '../lib/ocr/detector'
 import type { OcrLanguage, PipelineProgress, PipelineResult } from '../lib/ocr/types'
-import { translateSentences, hasTranslatorApi } from '../lib/translate'
+import { translateSentences, hasTranslatorApi, disposeOpus } from '../lib/translate'
 import type {
   EnginePreference,
   TranslateProgress,
@@ -466,6 +466,9 @@ function ResultView({
     } catch (err) {
       setTransError(errorMessage(err))
     } finally {
+      // Release the MT session(s) after each run so repeated translations don't
+      // accumulate ORT/GPU memory and eventually OOM the tab.
+      await disposeOpus().catch(() => {})
       setTranslating(false)
     }
   }

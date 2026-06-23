@@ -46,15 +46,22 @@ const cache = new Map<string, Entry>() // keyed by modelId
 
 export async function loadOpusModel(
   modelId: string,
-  backend: ComputeBackend,
+  _backend: ComputeBackend,
   onProgress?: TranslateProgressCallback,
 ): Promise<TranslationPipeline> {
+  // MT runs on WASM even when OCR uses WebGPU. MarianMT models are tiny (q8,
+  // ~30–50MB) and translate sentence-by-sentence, so WebGPU buys almost
+  // nothing — but allocating GPU buffers for the encoder/decoder + KV cache on
+  // a phone, stacked behind the OCR pipeline, is what OOM-crashes the tab
+  // ("Aw, Snap"). Keep MT off the GPU. `backend` is kept for the cache key /
+  // signature but no longer selects the device.
+  const device: ComputeBackend = 'wasm'
   const existing = cache.get(modelId)
-  if (existing && existing.backend === backend) return existing.pipe
+  if (existing && existing.backend === device) return existing.pipe
 
   const files = new Map<string, { loaded: number; total: number }>()
   const pipe = createTranslator('translation', modelId, {
-    device: backend === 'webgpu' ? 'webgpu' : 'wasm',
+    device: 'wasm',
     // Always q8: fp32 on a phone (on top of the OCR engines) blows memory and
     // crashes the tab. q8 is ~1/4 the size and plenty for MT quality.
     dtype: 'q8',
@@ -79,7 +86,7 @@ export async function loadOpusModel(
         }
       : undefined,
   })
-  cache.set(modelId, { pipe, backend })
+  cache.set(modelId, { pipe, backend: device })
   return pipe
 }
 
@@ -102,8 +109,14 @@ export async function translateOpus(
 ): Promise<string[]> {
   const chain = CHAINS[lang]
   let current = sentences
+  let prevModel: string | null = null
   for (let hop = 0; hop < chain.length; hop++) {
+    // Pivot chains (ja→en→zh) run hops strictly in sequence, so free the
+    // previous hop's model BEFORE loading the next — keeping both MarianMT
+    // sessions resident doubles peak memory and OOM-crashes phones.
+    if (prevModel && prevModel !== chain[hop]) await disposeModel(prevModel)
     const pipe = await loadOpusModel(chain[hop], backend, onProgress)
+    prevModel = chain[hop]
     const label = chain.length > 1 ? `（第 ${hop + 1}/${chain.length} 段）` : ''
     const next: string[] = []
     for (let i = 0; i < current.length; i++) {
@@ -120,6 +133,19 @@ export async function translateOpus(
   return current
 }
 
-export function disposeOpus() {
-  cache.clear()
+/** Await a cached pipeline and actually release its ORT session / GPU buffers. */
+async function disposeModel(modelId: string) {
+  const entry = cache.get(modelId)
+  if (!entry) return
+  cache.delete(modelId)
+  try {
+    const pipe = (await entry.pipe) as unknown as { dispose?: () => unknown }
+    await pipe.dispose?.()
+  } catch {
+    // Loading may have failed; nothing to release.
+  }
+}
+
+export async function disposeOpus() {
+  await Promise.allSettled([...cache.keys()].map((id) => disposeModel(id)))
 }

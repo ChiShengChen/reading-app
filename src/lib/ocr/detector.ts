@@ -208,7 +208,15 @@ export async function detect(
   return regions
 }
 
-export function disposeDetector() {
+export async function disposeDetector() {
+  const p = sessionPromise
   sessionPromise = null
   sessionBackend = null
+  if (!p) return
+  try {
+    const session = await p
+    await session.release() // free ORT WASM/WebGPU buffers, not just the JS ref
+  } catch {
+    // Session may have failed to create; nothing to release.
+  }
 }

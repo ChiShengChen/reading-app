@@ -68,8 +68,7 @@ export async function preloadRecognizer(
 }
 
 export async function disposeRecognizers() {
-  await Promise.all([disposeTesseract(), disposeMangaOcr()])
-  disposePaddleRec()
+  await Promise.all([disposeTesseract(), disposeMangaOcr(), disposePaddleRec()])
 }
 
 /**

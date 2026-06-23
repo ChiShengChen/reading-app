@@ -157,7 +157,15 @@ export async function recognizePaddleEn(
   return { text: text.trim(), score: probCount ? probSum / probCount : 0 }
 }
 
-export function disposePaddleRec() {
+export async function disposePaddleRec() {
+  const p = loaded
   loaded = null
   loadedBackend = null
+  if (!p) return
+  try {
+    const { session } = await p
+    await session.release() // free ORT buffers, not just the JS ref
+  } catch {
+    // May have failed to load; nothing to release.
+  }
 }

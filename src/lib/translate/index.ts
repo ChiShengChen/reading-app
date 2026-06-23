@@ -25,7 +25,7 @@ export type {
   TranslateResult,
 } from './types'
 export { hasTranslatorApi, translatorAvailable } from './translatorApi'
-export { getOpusChain, setOpusChain, loadOpusModel } from './opusMt'
+export { getOpusChain, setOpusChain, loadOpusModel, disposeOpus } from './opusMt'
 
 /** Resolve which engine to actually use given preference + availability. */
 export async function resolveEngine(

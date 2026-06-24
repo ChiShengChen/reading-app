@@ -90,13 +90,55 @@ export async function loadOpusModel(
   return pipe
 }
 
-async function runHop(pipe: TranslationPipeline, inputs: string[]): Promise<string[]> {
+// MarianMT attention is O(n²) in token count, so one very long input line
+// (e.g. an OCR'd paragraph that never got sentence-split) can spike memory and
+// crash the tab. Cap each single inference at ~MAX_CHARS by splitting overly
+// long inputs at clause boundaries, then rejoin the translated pieces.
+const MAX_CHARS = 140
+
+export function chunkLong(text: string): string[] {
+  if (text.length <= MAX_CHARS) return [text]
+  const chunks: string[] = []
+  let rest = text.trim()
+  while (rest.length > MAX_CHARS) {
+    // Prefer to break after a clause boundary within the window; else at the
+    // last space; else hard-cut at the limit (CJK has no spaces).
+    const window = rest.slice(0, MAX_CHARS)
+    let cut = Math.max(
+      window.lastIndexOf('、'),
+      window.lastIndexOf('，'),
+      window.lastIndexOf(','),
+      window.lastIndexOf('；'),
+      window.lastIndexOf(';'),
+    )
+    if (cut < MAX_CHARS * 0.5) cut = window.lastIndexOf(' ')
+    if (cut < MAX_CHARS * 0.5) cut = MAX_CHARS - 1
+    chunks.push(rest.slice(0, cut + 1).trim())
+    rest = rest.slice(cut + 1).trim()
+  }
+  if (rest) chunks.push(rest)
+  return chunks
+}
+
+async function translateOne(pipe: TranslationPipeline, text: string): Promise<string> {
+  const res = (await pipe(text)) as
+    | Array<{ translation_text: string }>
+    | { translation_text: string }
+  return ((Array.isArray(res) ? res[0]?.translation_text : res.translation_text) ?? '').trim()
+}
+
+async function runHop(
+  pipe: TranslationPipeline,
+  inputs: string[],
+  joinSep: string,
+): Promise<string[]> {
   const out: string[] = []
   for (const text of inputs) {
-    const res = (await pipe(text)) as
-      | Array<{ translation_text: string }>
-      | { translation_text: string }
-    out.push(((Array.isArray(res) ? res[0]?.translation_text : res.translation_text) ?? '').trim())
+    const parts: string[] = []
+    for (const chunk of chunkLong(text)) {
+      if (chunk) parts.push(await translateOne(pipe, chunk))
+    }
+    out.push(parts.join(joinSep))
   }
   return out
 }
@@ -118,6 +160,8 @@ export async function translateOpus(
     const pipe = await loadOpusModel(chain[hop], backend, onProgress)
     prevModel = chain[hop]
     const label = chain.length > 1 ? `（第 ${hop + 1}/${chain.length} 段）` : ''
+    // Chinese output has no inter-clause spaces; English (pivot) output does.
+    const joinSep = chain[hop].endsWith('-zh') ? '' : ' '
     const next: string[] = []
     for (let i = 0; i < current.length; i++) {
       onProgress?.({
@@ -126,7 +170,7 @@ export async function translateOpus(
         ratio: i / current.length,
         message: `翻譯 ${i + 1} / ${current.length}${label}`,
       })
-      next.push(...(await runHop(pipe, [current[i]])))
+      next.push(...(await runHop(pipe, [current[i]], joinSep)))
     }
     current = next
   }

@@ -121,7 +121,17 @@ export function chunkLong(text: string): string[] {
 }
 
 async function translateOne(pipe: TranslationPipeline, text: string): Promise<string> {
-  const res = (await pipe(text)) as
+  // Greedy decoding (num_beams=1). Opus-MT ships a generation_config with beam
+  // search (num_beams 4–6); beams keep several hypotheses + KV caches resident
+  // at once, multiplying memory by the beam count — enough to OOM-crash the tab
+  // on WASM even for short sentences. Greedy cuts peak to ~1/beam_count.
+  // max_new_tokens + no_repeat_ngram_size also cap runaway/degenerate output.
+  const res = (await pipe(text, {
+    num_beams: 1,
+    do_sample: false,
+    max_new_tokens: 200,
+    no_repeat_ngram_size: 3,
+  } as unknown as Parameters<TranslationPipeline>[1])) as
     | Array<{ translation_text: string }>
     | { translation_text: string }
   return ((Array.isArray(res) ? res[0]?.translation_text : res.translation_text) ?? '').trim()
